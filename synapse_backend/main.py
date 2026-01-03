@@ -344,7 +344,8 @@ async def ingest_lecture(payload: VideoIngest):
         """Background task to generate podcast script"""
         try:
             # Update status to "generating"
-            db.collection('lectures').document(f"{payload.user_id}_{video_id}").update({
+            doc_ref = db.collection('users').document(payload.user_id).collection('lectures').document(video_id)
+            doc_ref.update({
                 'podcast_status': 'generating'
             })
             
@@ -364,7 +365,8 @@ async def ingest_lecture(payload: VideoIngest):
                 script = CognitiveService.generate_podcast_script(podcast_source[:15000], payload.user_profile)
                 
                 # Save to Firestore
-                db.collection('lectures').document(f"{payload.user_id}_{video_id}").update({
+                doc_ref = db.collection('users').document(payload.user_id).collection('lectures').document(video_id)
+                doc_ref.update({
                     'podcast_script': script,
                     'podcast_status': 'ready',
                     'podcast_generated_at': firestore.SERVER_TIMESTAMP
@@ -374,7 +376,8 @@ async def ingest_lecture(payload: VideoIngest):
                 
         except Exception as e:
             print(f"Async podcast generation failed: {e}")
-            db.collection('lectures').document(f"{payload.user_id}_{video_id}").update({
+            doc_ref = db.collection('users').document(payload.user_id).collection('lectures').document(video_id)
+            doc_ref.update({
                 'podcast_status': 'failed',
                 'podcast_error': str(e)
             })
@@ -401,7 +404,7 @@ async def generate_podcast_endpoint(payload: PodcastRequest):
 async def check_podcast_status(user_id: str, lecture_id: str):
     """Check if podcast is ready"""
     try:
-        doc = db.collection('lectures').document(f"{user_id}_{lecture_id}").get()
+        doc = db.collection('users').document(user_id).collection('lectures').document(lecture_id).get()
         if not doc.exists:
             raise HTTPException(status_code=404, detail="Lecture not found")
         
