@@ -73,32 +73,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        // Parse the AI content which is usually a JSON string in our prompt structure
-        // But if it's raw text (fallback), we handle that too.
-        String contentRaw = data['content'];
-        String summary = contentRaw;
-        List<dynamic> focus = [];
+        // PARSING LOGIC FIX:
+        // The backend returns a JSON object where "summary_data" is a STRING containing JSON.
+        String rawSummaryJson = data['summary_data'];
         
+        // Clean markdown code blocks if present (common LLM behavior)
+        rawSummaryJson = rawSummaryJson.replaceAll("```json", "").replaceAll("```", "").trim();
+        
+        // Decode the inner JSON
+        Map<String, dynamic> aiContent = {};
         try {
-            // Try to clean markdown fences if present
-            String cleanJson = contentRaw.replaceAll("```json", "").replaceAll("```", "").trim();
-            // FIX: Handle double-escaped newlines which break Markdown
-            cleanJson = cleanJson.replaceAll(r"\\n", r"\n");
-            
-            final parsedContent = jsonDecode(cleanJson);
-            summary = parsedContent['summary'];
-            focus = parsedContent['focus_points'] ?? [];
-            _mermaidCode = parsedContent['mermaid_diagram'] ?? "";
+            aiContent = jsonDecode(rawSummaryJson);
         } catch (e) {
-            print("JSON Parse Error (keeping raw text): $e");
+            print("Inner JSON Parse Error: $e");
+            // Fallback if parsing fails (show raw text)
+            aiContent = {"summary": rawSummaryJson};
         }
 
         setState(() {
-          _currentSummary = summary;
-          _focusPoints = focus;
-          _currentVideoId = data['lecture_id'];
-          _transcriptContext = data['transcript_context'];
-          _currentPodcastScript = ""; // Reset podcast on new video
+          _currentSummary = aiContent['summary'] ?? "No summary available.";
+          _focusPoints = List<String>.from(aiContent['focus_points'] ?? []);
+          _mermaidCode = aiContent['mermaid_diagram'] ?? "";
+          _currentVideoId = data['lecture_id']; // Keep this line
+          _transcriptContext = data['transcript_context'] ?? "";
+          _currentPodcastScript = ""; 
         });
       } else {
         setState(() => _currentSummary = "Error: ${response.body}");
