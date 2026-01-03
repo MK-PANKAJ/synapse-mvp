@@ -42,17 +42,17 @@ class _PodcastTabState extends State<PodcastTab> {
 
         // VOICE MODULATION LOGIC
         if (line.contains("**Max**") || line.contains("Max:")) {
-            // Student: Energetic, slightly higher pitch, faster
-            await flutterTts.setPitch(1.2);
-            await flutterTts.setSpeechRate(0.6);
+            // Student: Energetic, higher pitch, FAST (ADHD friendly)
+            await flutterTts.setPitch(1.1);
+            await flutterTts.setSpeechRate(0.9); // Was 0.6
         } else if (line.contains("**Dr. V**") || line.contains("Dr. V:")) {
-             // Professor: Calm, lower pitch, slower
-            await flutterTts.setPitch(0.8);
-            await flutterTts.setSpeechRate(0.4);
+             // Professor: Calm, lower pitch, normal speed
+            await flutterTts.setPitch(0.9); 
+            await flutterTts.setSpeechRate(0.7); // Was 0.4
         } else {
             // Narrator / Default
             await flutterTts.setPitch(1.0);
-            await flutterTts.setSpeechRate(0.5);
+            await flutterTts.setSpeechRate(0.8); // Was 0.5
         }
         
         // Speak the clean text 

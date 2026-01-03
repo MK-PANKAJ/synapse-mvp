@@ -123,8 +123,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                  final merMatch = RegExp(r'"mermaid_diagram":\s*"(.*?)(?<!\\)"', dotAll: true).firstMatch(rawSummaryJson);
                  if (merMatch != null) {
                      String rawMermaid = merMatch.group(1)?.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"') ?? "";
-                     // SANITIZER: Remove HTML tags (like <sub>, <br>) as they break mermaid.ink
-                     _mermaidCode = rawMermaid.replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: false), "");
+                     // SANITIZER: 
+                     // 1. Remove HTML tags
+                     // 2. Fix Smart Quotes (” -> ") which break the renderer
+                     _mermaidCode = rawMermaid
+                        .replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: false), "")
+                        .replaceAll('”', '"')
+                        .replaceAll('“', '"');
                      aiContent['mermaid_diagram'] = _mermaidCode;
                  }
             } catch (_) {}
