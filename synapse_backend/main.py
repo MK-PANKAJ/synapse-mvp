@@ -1,5 +1,4 @@
 import os
-import google.generativeai as genai
 import vertexai
 from vertexai.generative_models import GenerativeModel
 from google.cloud import firestore
@@ -8,51 +7,35 @@ from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi
 from typing import List, Optional, Dict
 from dotenv import load_dotenv
+from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-# --- CONFIGURATION ---
-PROJECT_ID = os.getenv("GCP_PROJECT", "your-project-id")
+# --- CLOUD CONFIGURATION ---
+# Default to current environment if variables not set
+PROJECT_ID = os.getenv("GCP_PROJECT", "synapse-483211") 
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # API Key for Local Mode
 
-# Global Services
-model = None
-db = None
-mock_db: Dict[str, dict] = {} # In-memory DB for local mode
+print(f"Starting Synapse Backend in CLOUD MODE.")
+print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
 
-# Initialize AI Service
-model = None
+# --- INITIALIZE GOOGLE CLOUD SERVICES ---
 try:
-    print("Attempting Cloud Mode with Vertex AI...")
+    # 1. Vertex AI
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    temp_model = GenerativeModel("gemini-1.5-pro-001")
-    # CRITICAL: Verify auth works, otherwise fallback
-    temp_model.generate_content("test") 
-    model = temp_model
-    print("Success: Connected to Vertex AI.")
-except Exception as e:
-    print(f"Vertex AI init/auth failed: {e}")
-    
-    if GEMINI_API_KEY:
-        print("Falling back to Local Mode with Gemini API Key...")
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-pro')
-        print("Success: Connected to Gemini API.")
-    else:
-        print("Warning: No AI Service configured (Vertex failed & No API Key).")
+    model = GenerativeModel("gemini-1.5-pro-001")
+    print("SUCCESS: Vertex AI Initialized.")
 
-# Initialize Database Service
-try:
+    # 2. Firestore
     db = firestore.Client(project=PROJECT_ID)
-    print("Firestore Connected")
+    print("SUCCESS: Firestore Initialized.")
 except Exception as e:
-    print(f"Warning: Firestore init failed: {e}. Switching to Mock DB (Local Mode).")
+    print(f"CRITICAL ERROR - CLOUD INIT FAILED: {e}")
+    # We do NOT crash here so logs can be read, but app will be broken.
+    model = None
     db = None
 
-from fastapi.middleware.cors import CORSMiddleware
-
-app = FastAPI(title="Synapse API", version="1.0-Local")
+app = FastAPI(title="Synapse API (Cloud Only)", version="2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -62,22 +45,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- DATA MODELS ---
-class VideoIngest(BaseModel):
-    user_id: str
-    video_url: str
-    user_profile: str
-
-class DoubtQuery(BaseModel):
-    lecture_id: str
-    user_id: str
-    question: str
-
-class PodcastRequest(BaseModel):
-    transcript_text: str
-
-# --- SERVICE LAYER ---
-# --- AI PERSONALITY CONFIGURATION ---
+# --- AI PROMPTS ---
 SYSTEM_PROMPT_TEMPLATE = """
 You are an Expert Educational Neuro-adapter.
 BASE INSTRUCTION: Make it extremely simple (ELIF5). Use analogies.
@@ -109,6 +77,20 @@ RULES:
 - NO Sound Effects.
 """
 
+# --- DATA MODELS ---
+class VideoIngest(BaseModel):
+    user_id: str
+    video_url: str
+    user_profile: str
+
+class DoubtQuery(BaseModel):
+    lecture_id: str
+    user_id: str
+    question: str
+
+class PodcastRequest(BaseModel):
+    transcript_text: str
+
 # --- SERVICE LAYER ---
 class CognitiveService:
     @staticmethod
@@ -118,34 +100,29 @@ class CognitiveService:
         if "ADHD" in profile:
             return "Format: High-energy, emoji-bullet points. Short sentences."
         if "Dyslexia" in profile:
-            return "Format: Simple syntax. Visual metaphors. No walls of text."
+            return "Format: Simple syntax. Use visual metaphors. No walls of text."
         return "Format: Clear, academic summary."
 
     @staticmethod
     def generate_content(transcript: str, profile: str):
-        print(f"DEBUG: Generating content. Model is: {model}")
         if not model:
-            print("DEBUG: Model is None! Returning error.")
-            return "{\"summary\": \"Error: AI not connected. Check API Key.\", \"bingo_terms\": []}"
+            raise HTTPException(status_code=500, detail="Vertex AI is not connected. Check Server Logs.")
             
         profile_instruction = CognitiveService.get_prompt_logic(profile)
-        # Inject Profile into Template
         prompt = SYSTEM_PROMPT_TEMPLATE.format(profile_instruction=profile_instruction)
         prompt += f"\n\nTRANSCRIPT:\n{transcript[:10000]}..."
         
         try:
-            print("DEBUG: Sending request to Vertex AI...")
             response = model.generate_content(prompt)
-            print("DEBUG: Received response from Vertex AI.")
             return response.text
         except Exception as e:
-            print(f"DEBUG: Generation Exception: {e}")
-            return f"{{\"summary\": \"AI Error: {str(e)}\", \"bingo_terms\": []}}"
+            print(f"Vertex Generation Error: {e}")
+            raise HTTPException(status_code=500, detail=f"Vertex AI Error: {str(e)}")
 
     @staticmethod
     def generate_podcast_script(transcript: str):
         if not model:
-            return "Error: AI not connected."
+            raise HTTPException(status_code=500, detail="Vertex AI is not connected.")
             
         prompt = PODCAST_PROMPT_TEMPLATE + f"\n\nTRANSCRIPT:\n{transcript[:10000]}"
         
@@ -153,63 +130,53 @@ class CognitiveService:
             response = model.generate_content(prompt)
             return response.text
         except Exception as e:
-            return f"AI Error: {str(e)}"
+             raise HTTPException(status_code=500, detail=f"Vertex AI Error: {str(e)}")
 
 class DatabaseService:
     @staticmethod
     def save_lecture(user_id, video_id, summary_data, transcript_snippet):
+        if not db:
+             print("Firestore not connected. Skipping save.")
+             return "error-no-db"
+
         data = {
             "video_id": video_id,
             "status": "processed",
             "summary_data": summary_data,
             "context_snippet": transcript_snippet, 
-            "timestamp": "NOW"
+            "timestamp": firestore.SERVER_TIMESTAMP
         }
         
-        if db:
-            doc_ref = db.collection("users").document(user_id).collection("lectures").document(video_id)
-            doc_ref.set(data)
-            return doc_ref.id
-        else:
-            # Local Mock DB
-            mock_key = f"{user_id}_{video_id}"
-            mock_db[mock_key] = data
-            print(f"[Local DB] Saved lecture {video_id} to memory.")
-            return "mock-id"
+        doc_ref = db.collection("users").document(user_id).collection("lectures").document(video_id)
+        doc_ref.set(data)
+        return doc_ref.id
 
     @staticmethod
     def get_context(user_id, video_id):
-        if db:
-            doc = db.collection("users").document(user_id).collection("lectures").document(video_id).get()
-            return doc.to_dict().get("context_snippet", "") if doc.exists else ""
-        else:
-            mock_key = f"{user_id}_{video_id}"
-            return mock_db.get(mock_key, {}).get("context_snippet", "")
+        if not db: return ""
+        doc = db.collection("users").document(user_id).collection("lectures").document(video_id).get()
+        return doc.to_dict().get("context_snippet", "") if doc.exists else ""
 
 # --- API ENDPOINTS ---
 @app.post("/api/v1/ingest")
 async def ingest_lecture(payload: VideoIngest):
+    video_id = payload.video_url.split("v=")[1].split("&")[0] if "v=" in payload.video_url else "mock_vid"
+    
     try:
-        video_id = payload.video_url.split("v=")[1].split("&")[0] if "v=" in payload.video_url else "mock_vid"
-        
-        try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-            full_text = " ".join([t['text'] for t in transcript_list])
-        except:
-             # Fallback for testing without valid video
-             full_text = "This is a mock transcript about Mitochondria." 
-        
-        ai_response = CognitiveService.generate_content(full_text, payload.user_profile)
-        DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
-        
-        return {
-            "status": "success", 
-            "lecture_id": video_id, 
-            "content": ai_response,
-            "transcript_context": full_text[:5000]
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+        full_text = " ".join([t['text'] for t in transcript_list])
+    except:
+            full_text = "This is a mock transcript about Mitochondria because YouTube failed." 
+    
+    ai_response = CognitiveService.generate_content(full_text, payload.user_profile)
+    DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
+    
+    return {
+        "status": "success", 
+        "lecture_id": video_id, 
+        "content": ai_response,
+        "transcript_context": full_text[:5000]
+    }
 
 @app.post("/api/v1/generate-podcast")
 async def generate_podcast_endpoint(payload: PodcastRequest):
@@ -218,8 +185,6 @@ async def generate_podcast_endpoint(payload: PodcastRequest):
 @app.post("/api/v1/ask-doubt")
 async def solve_doubt(payload: DoubtQuery):
     context = DatabaseService.get_context(payload.user_id, payload.lecture_id)
-    if not context: context = "Context not found."
-    
     chat_prompt = f"Context: {context}\nQuestion: {payload.question}\nAnswer in 2 sentences."
     
     if model:
