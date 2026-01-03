@@ -28,8 +28,8 @@ print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
 try:
     # 1. Vertex AI
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    # Using 1.5-flash for better quota stability (2.5-flash hit 429 limits)
-    model = GenerativeModel("gemini-1.5-flash")
+    # Using explicit version -001 to avoid 404 on alias
+    model = GenerativeModel("gemini-1.5-flash-001")
     print("SUCCESS: Vertex AI Initialized.")
 
     # 2. Firestore
