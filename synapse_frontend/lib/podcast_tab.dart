@@ -31,8 +31,8 @@ class _PodcastTabState extends State<PodcastTab> {
       setState(() => isPlaying = false);
     } else {
       setState(() => isPlaying = true);
-      // Configure for Hinglish/Indian English if available
-      await flutterTts.setLanguage("en-IN"); 
+      // Use Hindi (India) locale for proper Hinglish pronunciation
+      await flutterTts.setLanguage("hi-IN"); 
       await flutterTts.setPitch(1.0);
       await flutterTts.speak(widget.content);
       
