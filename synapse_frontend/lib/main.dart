@@ -68,9 +68,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           "video_url": _urlController.text,
           "user_profile": _selectedProfile
         }),
-      );
+      ).timeout(Duration(seconds: 90)); // Timeout at 1.5 mins (User feedback: 5m is too long)
       
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
@@ -110,12 +109,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _currentPodcastScript = ""; 
         });
       } else {
-        setState(() => _currentSummary = "Error: ${response.body}");
+        setState(() => _currentSummary = "Server Error (${response.statusCode}): ${response.body}");
       }
     } catch (e) {
-      setState(() => _currentSummary = "Connection Error: $e");
+      // If error is empty or timeout, show explicit message
+      String errorMsg = e.toString();
+      if (errorMsg.contains("Timeout")) {
+          errorMsg = "Request timed out. The video might be too long or the server is busy.";
+      }
+      setState(() => _currentSummary = "Connection/Processing Error: $errorMsg");
     }
-    setState(() => _isLoading = false);
     setState(() => _isLoading = false);
   }
 
