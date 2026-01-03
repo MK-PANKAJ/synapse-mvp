@@ -92,7 +92,9 @@ class VideoIngest(BaseModel):
 class DoubtQuery(BaseModel):
     lecture_id: str
     user_id: str
+    user_id: str
     question: str
+    user_profile: str = "General" # Default for backward compatibility
 
 class PodcastRequest(BaseModel):
     transcript_text: str
@@ -228,11 +230,26 @@ async def generate_podcast_endpoint(payload: PodcastRequest):
 @app.post("/api/v1/ask-doubt")
 async def solve_doubt(payload: DoubtQuery):
     context = DatabaseService.get_context(payload.user_id, payload.lecture_id)
-    chat_prompt = f"Context: {context}\nQuestion: {payload.question}\nAnswer in 2 sentences."
+    
+    # Cognitive Translation Logic
+    profile_instruction = CognitiveService.get_prompt_logic(payload.user_profile)
+    
+    chat_prompt = f"""
+    ROLE: Expert Private Tutor.
+    STYLE: {profile_instruction}
+    
+    CONTEXT: {context[:5000]}
+    
+    STUDENT QUESTION: {payload.question}
+    ANSWER:
+    """
     
     if model:
-        response = model.generate_content(chat_prompt)
-        return {"answer": response.text}
+        try:
+            response = model.generate_content(chat_prompt)
+            return {"answer": response.text}
+        except Exception as e:
+            return {"answer": f"AI Error: {str(e)}"}
     else:
         return {"answer": "AI not connected."}
 

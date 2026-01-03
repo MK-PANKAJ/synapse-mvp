@@ -175,7 +175,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context, 
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => DoubtSheet(backendUrl: backendUrl, userId: userID, lectureId: _currentVideoId)
+      builder: (ctx) => DoubtSheet(
+          backendUrl: backendUrl, 
+          userId: userID, 
+          lectureId: _currentVideoId,
+          userProfile: _selectedProfile // Pass profile
+      )
     );
   }
 
@@ -334,7 +339,14 @@ class DoubtSheet extends StatefulWidget {
   final String backendUrl;
   final String userId;
   final String lectureId;
-  DoubtSheet({required this.backendUrl, required this.userId, required this.lectureId});
+  final String userProfile; // New Field
+
+  DoubtSheet({
+      required this.backendUrl, 
+      required this.userId, 
+      required this.lectureId,
+      required this.userProfile
+  });
 
   @override
   _DoubtSheetState createState() => _DoubtSheetState();
@@ -360,7 +372,8 @@ class _DoubtSheetState extends State<DoubtSheet> {
           body: jsonEncode({
             "user_id": widget.userId,
             "lecture_id": widget.lectureId, 
-            "question": _qController.text
+            "question": _qController.text,
+            "user_profile": widget.userProfile // Send to backend
           }),
         );
         
