@@ -404,19 +404,35 @@ async def generate_podcast_endpoint(payload: PodcastRequest):
 async def check_podcast_status(user_id: str, lecture_id: str):
     """Check if podcast is ready"""
     try:
-        doc = db.collection('users').document(user_id).collection('lectures').document(lecture_id).get()
+        print(f"Checking podcast status for user_id={user_id}, lecture_id={lecture_id}")
+        doc_ref = db.collection('users').document(user_id).collection('lectures').document(lecture_id)
+        print(f"Firestore path: users/{user_id}/lectures/{lecture_id}")
+        
+        doc = doc_ref.get()
+        print(f"Document exists: {doc.exists}")
+        
         if not doc.exists:
-            raise HTTPException(status_code=404, detail="Lecture not found")
+            # List all lectures for this user to help debug
+            all_lectures = db.collection('users').document(user_id).collection('lectures').stream()
+            lecture_ids = [doc.id for doc in all_lectures]
+            print(f"Available lecture IDs for user {user_id}: {lecture_ids}")
+            raise HTTPException(status_code=404, detail=f"Lecture not found. Available IDs: {lecture_ids}")
         
         data = doc.to_dict()
+        print(f"Document data keys: {list(data.keys())}")
         return {
             "status": data.get('podcast_status', 'unknown'),
             "script": data.get('podcast_script', ''),
             "error": data.get('podcast_error')
         }
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error checking podcast status: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @app.post("/api/v1/ask-doubt")
