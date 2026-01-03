@@ -1,4 +1,5 @@
 import os
+import mimetypes
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part
 from google.cloud import firestore, storage
@@ -127,7 +128,14 @@ class CognitiveService:
             if video_uri:
                 # MULTIMODAL MODE (Video + Text Prompt)
                 print(f"DEBUG: Processing Video from {video_uri}")
-                mime_type = "audio/mp3" if video_uri.endswith(".mp3") else "video/mp4"
+                
+                # Dynamic MIME Type Detection
+                mime_type, _ = mimetypes.guess_type(video_uri)
+                if not mime_type:
+                    mime_type = "video/mp4" # Default fallback
+                
+                print(f"DEBUG: Detected MIME Type: {mime_type}")
+                
                 video_part = Part.from_uri(uri=video_uri, mime_type=mime_type)
                 inputs.append(video_part)
                 inputs.append("Analyze this content.")
