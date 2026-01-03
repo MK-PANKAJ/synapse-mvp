@@ -255,10 +255,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
 
   void _launchMermaidEditor() async {
-      if (_mermaidCode.isEmpty) return;
+      if (_currentMermaidCode.isEmpty) return;
       
       final jsonState = jsonEncode({
-        "code": _mermaidCode,
+        "code": _currentMermaidCode,
         "mermaid": {"theme": "default"}
       });
       final base64State = base64Encode(utf8.encode(jsonState));
@@ -399,7 +399,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ),
 
                                             // VISUAL TAB
-                                            _mermaidCode.isEmpty
+                                            _currentMermaidCode.isEmpty
                                             ? Center(child: Text("No visual diagram available for this content."))
                                             : Container(
                                                 padding: EdgeInsets.all(16),
@@ -409,13 +409,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                     Expanded(
                                                         child: Center(
                                                             child: Image.network(
-                                                                "https://mermaid.ink/img/${base64Encode(utf8.encode(_mermaidCode))}",
+                                                                "https://mermaid.ink/img/${base64Encode(utf8.encode(_currentMermaidCode))}",
                                                                 loadingBuilder: (ctx, child, loadingProgress) {
                                                                     if (loadingProgress == null) return child;
                                                                     return CircularProgressIndicator();
                                                                 },
                                                                 errorBuilder: (ctx, error, stackTrace) => 
-                                                                    SingleChildScrollView(child: SelectableText(_mermaidCode)), // Fallback to code
+                                                                    SingleChildScrollView(child: SelectableText(_currentMermaidCode)), // Fallback to code
                                                             )
                                                         )
                                                     ),
