@@ -78,6 +78,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         try {
             // Try to clean markdown fences if present
             String cleanJson = contentRaw.replaceAll("```json", "").replaceAll("```", "").trim();
+            // FIX: Handle double-escaped newlines which break Markdown
+            cleanJson = cleanJson.replaceAll(r"\\n", r"\n");
+            
             final parsedContent = jsonDecode(cleanJson);
             summary = parsedContent['summary'];
             focus = parsedContent['focus_points'] ?? [];
