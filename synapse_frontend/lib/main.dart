@@ -376,11 +376,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                                                 'latex': LatexElementBuilder(),
                                                                             },
                                                                             extensionSet: md.ExtensionSet(
-                                                                                [
-                                                                                    md.ExtensionSet.gitHubFlavored.blockSyntaxes,
-                                                                                    [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes, LatexSyntax()]
-                                                                                ].expand((x) => x).toList(),
-                                                                                md.ExtensionSet.gitHubFlavored.contentSyntaxes
+                                                                                md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+                                                                                [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes, LatexSyntax()]
                                                                             ),
                                                                         )
                                                                     )
@@ -521,7 +518,7 @@ class _DoubtSheetState extends State<DoubtSheet> {
       ),
     );
   }
-  }
+
 }
 
 // --- CUSTOM SYNTAX FOR LATEX ($...$) ---
