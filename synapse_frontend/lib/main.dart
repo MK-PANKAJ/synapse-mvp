@@ -135,8 +135,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                      aiContent['mermaid_diagram'] = _mermaidCode;
                  }
             } catch (_) {}
-        }
-
+            
              setState(() {
                  _currentVideoId = data['lecture_id']?.toString() ?? "";
                  _transcriptContext = data['transcript_context']?.toString() ?? "";
@@ -155,8 +154,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                  // Show Summary Tab automatically
                  _tabController?.animateTo(0);
              });
+        } else {
+             setState(() => _currentSummary = "Server Error (${response.statusCode}): ${response.body}");
         }
+    } catch (e) {
+      String errorMsg = e.toString();
+      if (errorMsg.contains("Timeout")) {
+          errorMsg = "Request timed out. The video might be too long or the server is busy.";
+      }
+      setState(() => _currentSummary = "Connection/Processing Error: $errorMsg");
     }
+    setState(() => _isLoading = false);
+  }
 
   Future<void> _pickAndUploadVideo() async {
       FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.video);
