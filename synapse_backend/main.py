@@ -28,9 +28,9 @@ print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
 try:
     # 1. Vertex AI
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    # Gemini 1.5 is EOL (May 2025). Using Gemini 2.0 Flash which is stable in 2026.
-    # Note: Retry logic handles strict quotas.
-    model = GenerativeModel("gemini-2.0-flash")
+    # Gemini 2.0 retires Mar 2026. Using Gemini 2.5 Flash (Supported until June 2026).
+    # Retry logic (implemented below) handles 429 Quota errors.
+    model = GenerativeModel("gemini-2.5-flash")
     print("SUCCESS: Vertex AI Initialized.")
 
     # 2. Firestore
