@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:file_picker/file_picker.dart';
 import 'podcast_tab.dart';
 
 void main() {
@@ -35,7 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   // Data States
   String _currentSummary = "";
-  List<dynamic> _bingoTerms = [];
+  List<dynamic> _focusPoints = [];
   String _currentPodcastScript = "";
   String _currentVideoId = "";
   String _transcriptContext = "";
@@ -69,21 +70,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // But if it's raw text (fallback), we handle that too.
         String contentRaw = data['content'];
         String summary = contentRaw;
-        List<dynamic> bingo = [];
+        List<dynamic> focus = [];
         
         try {
             // Try to clean markdown fences if present
             String cleanJson = contentRaw.replaceAll("```json", "").replaceAll("```", "").trim();
             final parsedContent = jsonDecode(cleanJson);
             summary = parsedContent['summary'];
-            bingo = parsedContent['bingo_terms'] ?? [];
+            focus = parsedContent['focus_points'] ?? [];
         } catch (e) {
             print("JSON Parse Error (keeping raw text): $e");
         }
 
         setState(() {
           _currentSummary = summary;
-          _bingoTerms = bingo;
+          _focusPoints = focus;
           _currentVideoId = data['lecture_id'];
           _transcriptContext = data['transcript_context'];
           _currentPodcastScript = ""; // Reset podcast on new video
@@ -95,6 +96,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() => _currentSummary = "Connection Error: $e");
     }
     setState(() => _isLoading = false);
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _pickAndUploadVideo() async {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.video);
+      
+      if (result != null) {
+          setState(() => _isLoading = true);
+          PlatformFile file = result.files.first;
+          
+          // WEB vs MOBILE: usage differs, but for MVP web we use bytes
+          // Note: For large files in prod, we'd use signed URLs. usage here is simple multipart.
+          var request = http.MultipartRequest("POST", Uri.parse('$backendUrl/api/v1/upload'));
+          
+          if (file.bytes != null) {
+              // WEB
+              request.files.add(http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name));
+          } else {
+             // MOBILE (not active, but safe fallback)
+             print("File path missing (common on web without bytes)");
+             setState(() { _isLoading = false; _currentSummary = "Error: File selection failed."; });
+             return;
+          }
+
+          try {
+              var streamedResponse = await request.send();
+              var response = await http.Response.fromStream(streamedResponse);
+              
+              if (response.statusCode == 200) {
+                  var data = jsonDecode(response.body);
+                  String videoUri = data['video_uri'];
+                  
+                  // Now Ingest
+                  _urlController.text = videoUri; // Show URI to user
+                  await _processVideo(); // Reuse ingest logic
+              } else {
+                   setState(() => _currentSummary = "Upload Failed: ${response.body}");
+              }
+          } catch (e) {
+              setState(() => _currentSummary = "Upload Error: $e");
+          }
+           setState(() => _isLoading = false);
+      }
   }
 
   Future<void> _generatePodcast() async {
@@ -154,6 +198,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             SizedBox(height: 10),
             
+            // OR UPLOAD BUTTON
+            Row(children: [
+                Expanded(child: Divider()),
+                Padding(padding: EdgeInsets.symmetric(horizontal: 10), child: Text("OR")),
+                Expanded(child: Divider()),
+            ]),
+            SizedBox(height: 10),
+            
+            SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _pickAndUploadVideo,
+                    icon: Icon(Icons.upload_file),
+                    label: Text("Upload Video File (MP4)"),
+                    style: OutlinedButton.styleFrom(padding: EdgeInsets.all(16))
+                )
+            ),
+            SizedBox(height: 20),
+            
             // 2. TABS (Summary vs Bingo vs Podcast)
             if (_isLoading) Expanded(child: Center(child: CircularProgressIndicator())),
             
@@ -167,7 +230,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     labelColor: Colors.indigo,
                                     tabs: [
                                         Tab(icon: Icon(Icons.article), text: "Summary"),
-                                        Tab(icon: Icon(Icons.grid_on), text: "Bingo"),
+                                        Tab(icon: Icon(Icons.bolt), text: "Focus"),
                                         Tab(icon: Icon(Icons.headphones), text: "Podcast"),
                                     ]
                                 ),
@@ -182,27 +245,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 child: SingleChildScrollView(child: MarkdownBody(data: _currentSummary))
                                             ),
                                             
-                                            // BINGO TAB
-                                            _bingoTerms.isEmpty 
-                                            ? Center(child: Text("No Bingo terms found."))
-                                            : GridView.builder(
+                                            // FOCUS TAB (FORMERLY BINGO)
+                                            _focusPoints.isEmpty 
+                                            ? Center(child: Text("No focus points found."))
+                                            : ListView.builder(
                                                 padding: EdgeInsets.all(16),
-                                                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                                    crossAxisCount: 3,
-                                                    crossAxisSpacing: 10, 
-                                                    mainAxisSpacing: 10
-                                                ),
-                                                itemCount: _bingoTerms.length,
+                                                itemCount: _focusPoints.length,
                                                 itemBuilder: (ctx, i) {
-                                                    return InkWell(
-                                                        onTap: () {}, // Handle tap to "collect"
-                                                        child: Container(
-                                                            decoration: BoxDecoration(
-                                                                color: Colors.amber.shade100,
-                                                                borderRadius: BorderRadius.circular(12),
-                                                                border: Border.all(color: Colors.amber)
+                                                    return Card(
+                                                        elevation: 2,
+                                                        margin: EdgeInsets.only(bottom: 12),
+                                                        color: Colors.amber.shade50,
+                                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                                        child: Padding(
+                                                            padding: EdgeInsets.all(16),
+                                                            child: Text(
+                                                                _focusPoints[i], 
+                                                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.indigo.shade900)
                                                             ),
-                                                            child: Center(child: Text(_bingoTerms[i], textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold))),
                                                         ),
                                                     );
                                                 }

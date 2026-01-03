@@ -25,3 +25,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
+  file_picker: ^6.1.1

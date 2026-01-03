@@ -1,8 +1,8 @@
 import os
 import vertexai
-from vertexai.generative_models import GenerativeModel
-from google.cloud import firestore
-from fastapi import FastAPI, HTTPException
+from vertexai.generative_models import GenerativeModel, Part
+from google.cloud import firestore, storage
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi
 from typing import List, Optional, Dict
@@ -15,6 +15,7 @@ load_dotenv()
 # Default to current environment if variables not set
 PROJECT_ID = os.getenv("GCP_PROJECT", "synapse-483211") 
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+BUCKET_NAME = f"{PROJECT_ID}-uploads" # Storage Bucket Name
 
 print(f"Starting Synapse Backend in CLOUD MODE.")
 print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
@@ -29,6 +30,10 @@ try:
     # 2. Firestore
     db = firestore.Client(project=PROJECT_ID)
     print("SUCCESS: Firestore Initialized.")
+
+    # 3. Cloud Storage
+    storage_client = storage.Client(project=PROJECT_ID)
+    print("SUCCESS: Storage Initialized.")
 except Exception as e:
     print(f"CRITICAL ERROR - CLOUD INIT FAILED: {e}")
     # We do NOT crash here so logs can be read, but app will be broken.
@@ -53,12 +58,12 @@ PROFILE ADAPTATION: {profile_instruction}
 
 TASK: Analyze the transcript and extract structured learning data.
 1. Create a "Learning Card Summary" (Markdown).
-2. Extract exactly 9 "Bingo Keywords".
+2. Extract 5-7 "Focus Points" (Micro-summaries: punchy, emoji-bullet points, max 10 words each) to help the student maintain attention.
 
 OUTPUT JSON FORMAT:
 {{
     "summary": "...markdown content...",
-    "bingo_terms": ["term1", "term2", ...]
+    "focus_points": ["⚡ Point 1", "🧠 Point 2", ...]
 }}
 """
 
@@ -104,20 +109,30 @@ class CognitiveService:
         return "Format: Clear, academic summary."
 
     @staticmethod
-    def generate_content(transcript: str, profile: str):
+    def generate_content(transcript: str, profile: str, video_uri: Optional[str] = None):
         if not model:
             raise HTTPException(status_code=500, detail="Vertex AI is not connected. Check Server Logs.")
             
         profile_instruction = CognitiveService.get_prompt_logic(profile)
-        prompt = SYSTEM_PROMPT_TEMPLATE.format(profile_instruction=profile_instruction)
-        prompt += f"\n\nTRANSCRIPT:\n{transcript[:10000]}..."
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(profile_instruction=profile_instruction)
         
         try:
-            response = model.generate_content(prompt)
+            inputs = [system_prompt]
+            if video_uri:
+                # MULTIMODAL MODE (Video + Text Prompt)
+                print(f"DEBUG: Processing Video from {video_uri}")
+                video_part = Part.from_uri(uri=video_uri, mime_type="video/mp4")
+                inputs.append(video_part)
+                inputs.append("Analyze this video lecture.")
+            else:
+                # TEXT MODE (Transcript Only)
+                inputs.append(f"\n\nTRANSCRIPT:\n{transcript[:25000]}...") # Increased limit for text
+
+            response = model.generate_content(inputs)
             return response.text
         except Exception as e:
             print(f"Vertex Generation Error: {e}")
-            raise HTTPException(status_code=500, detail=f"Vertex AI Error: {str(e)}")
+            return f"{{\"summary\": \"AI Error: {str(e)}\", \"focus_points\": []}}"
 
     @staticmethod
     def generate_podcast_script(transcript: str):
@@ -158,17 +173,42 @@ class DatabaseService:
         return doc.to_dict().get("context_snippet", "") if doc.exists else ""
 
 # --- API ENDPOINTS ---
+@app.post("/api/v1/upload")
+async def upload_video(file: UploadFile = File(...)):
+    if not storage_client:
+        raise HTTPException(status_code=500, detail="Storage not initialized.")
+        
+    try:
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(f"uploads/{file.filename}")
+        blob.upload_from_file(file.file, content_type=file.content_type)
+        
+        return {"status": "success", "video_uri": f"gs://{BUCKET_NAME}/uploads/{file.filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload Failed: {str(e)}")
+
 @app.post("/api/v1/ingest")
 async def ingest_lecture(payload: VideoIngest):
-    video_id = payload.video_url.split("v=")[1].split("&")[0] if "v=" in payload.video_url else "mock_vid"
-    
-    try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        full_text = " ".join([t['text'] for t in transcript_list])
-    except:
-            full_text = "This is a mock transcript about Mitochondria because YouTube failed." 
-    
-    ai_response = CognitiveService.generate_content(full_text, payload.user_profile)
+    # Handle GCS Video (Direct Upload)
+    if payload.video_url.startswith("gs://"):
+        video_id = payload.video_url.split("/")[-1] # filename as ID
+        full_text = "Video Content (Processed via Multimodal AI)"
+        
+        ai_response = CognitiveService.generate_content("", payload.user_profile, video_uri=payload.video_url)
+        
+    # Handle YouTube Video
+    else:
+        video_id = payload.video_url.split("v=")[1].split("&")[0] if "v=" in payload.video_url else "mock_vid"
+        
+        try:
+            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
+            full_text = " ".join([t['text'] for t in transcript_list])
+        except Exception as e:
+                print(f"Transcript Error: {e}")
+                raise HTTPException(status_code=400, detail="Could not retrieve transcript. The video might not have captions enabled.") 
+        
+        ai_response = CognitiveService.generate_content(full_text, payload.user_profile)
+
     DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
     
     return {
