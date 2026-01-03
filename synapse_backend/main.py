@@ -92,29 +92,20 @@ class CognitiveService:
 
     @staticmethod
     def generate_content(transcript: str, profile: str):
+        print(f"DEBUG: Generating content. Model is: {model}")
         if not model:
+            print("DEBUG: Model is None! Returning error.")
             return "{\"summary\": \"Error: AI not connected. Check API Key.\", \"bingo_terms\": []}"
             
         system_instruction = CognitiveService.get_prompt_logic(profile)
-        prompt = f"""
-        ROLE: Expert Educational Neuro-adapter.
-        INSTRUCTION: {system_instruction}
-        TASK: Analyze this transcript.
-        1. Create a structured learning card summary.
-        2. Extract exactly 9 "Bingo Keywords" (single words) central to the topic.
-        
-        TRANSCRIPT: {transcript[:10000]}...
-        
-        OUTPUT FORMAT (Strict JSON):
-        {{
-            "summary": "markdown_text_here",
-            "bingo_terms": ["term1", "term2", ...]
-        }}
-        """
+        # ... (rest of prompt construction)
         try:
+            print("DEBUG: Sending request to Vertex AI...")
             response = model.generate_content(prompt)
+            print("DEBUG: Received response from Vertex AI.")
             return response.text
         except Exception as e:
+            print(f"DEBUG: Generation Exception: {e}")
             return f"{{\"summary\": \"AI Error: {str(e)}\", \"bingo_terms\": []}}"
 
     @staticmethod
