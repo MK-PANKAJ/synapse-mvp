@@ -1,7 +1,7 @@
 import os
 import mimetypes
 import vertexai
-from vertexai.generative_models import GenerativeModel, Part
+from vertexai.generative_models import GenerativeModel, Part, GenerationConfig
 from google.cloud import firestore, storage
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
@@ -143,7 +143,10 @@ class CognitiveService:
                 # TEXT MODE (Transcript Only)
                 inputs.append(f"\n\nTRANSCRIPT:\n{transcript[:25000]}...") # Increased limit for text
 
-            response = model.generate_content(inputs)
+            response = model.generate_content(
+                inputs,
+                generation_config=GenerationConfig(response_mime_type="application/json")
+            )
             return response.text
         except Exception as e:
             print(f"Vertex Generation Error: {e}")
