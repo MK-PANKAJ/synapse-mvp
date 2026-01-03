@@ -100,8 +100,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             
             if (summaryVal.isNotEmpty) {
                  // Unescape basic JSON characters for readable text
-                 // FIX: Also unescape \$ to $ for LaTeX rendering
-                 summaryVal = summaryVal.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"').replaceAll(r'\\$', r'$');
+                 // FIX: Aggressively replace \\n with actual newlines and unescape $
+                 summaryVal = summaryVal.replaceAll(r'\\n', '\n').replaceAll(r'\n', '\n').replaceAll(r'\"', '"').replaceAll(r'\\$', r'$');
                  aiContent['summary'] = summaryVal;
             } else {
                  aiContent['summary'] = rawSummaryJson; // Ultimate fallback
@@ -375,9 +375,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                                         child: Padding(
                                                             padding: EdgeInsets.all(16),
-                                                            child: Text(
-                                                                _focusPoints[i], 
-                                                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.indigo.shade900)
+                                                            child: MarkdownBody(
+                                                                data: _focusPoints[i],
+                                                                styleSheet: MarkdownStyleSheet(
+                                                                    p: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.indigo.shade900),
+                                                                    strong: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepPurple),
+                                                                ),
                                                             ),
                                                         ),
                                                     );
