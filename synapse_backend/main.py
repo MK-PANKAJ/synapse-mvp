@@ -246,7 +246,8 @@ class DatabaseService:
             "status": "processed",
             "summary_data": summary_data,
             "context_snippet": transcript_snippet, 
-            "timestamp": firestore.SERVER_TIMESTAMP
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "podcast_status": "pending"  # Initialize podcast as pending
         }
         
         doc_ref = db.collection("users").document(user_id).collection("lectures").document(video_id)
@@ -336,40 +337,84 @@ async def ingest_lecture(payload: VideoIngest):
 
     DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
     
-    # GENERATE PODCAST SCRIPT ALONGSIDE SUMMARY
-    podcast_script = ""
-    try:
-        # Use full_text for podcast if available, otherwise use AI summary
-        podcast_source = full_text if full_text and not full_text.startswith("Video Content") and not full_text.startswith("Audio Content") else ""
-        if podcast_source:
-            podcast_script = CognitiveService.generate_podcast_script(podcast_source[:15000], payload.user_profile)
-        else:
-            # Fallback: extract summary from ai_response and use that
-            import json
-            try:
-                summary_data = json.loads(ai_response)
-                summary_text = summary_data.get('summary', '')
-                if summary_text:
-                    podcast_script = CognitiveService.generate_podcast_script(summary_text, payload.user_profile)
-            except:
-                pass
-    except Exception as e:
-        print(f"Podcast generation failed: {e}")
-        podcast_script = "Podcast generation failed. Please try again later."
+    # TRIGGER ASYNC PODCAST GENERATION IN BACKGROUND
+    import threading
+    
+    def generate_podcast_async():
+        """Background task to generate podcast script"""
+        try:
+            # Update status to "generating"
+            db.collection('lectures').document(f"{payload.user_id}_{video_id}").update({
+                'podcast_status': 'generating'
+            })
+            
+            # Determine source for podcast
+            podcast_source = full_text if full_text and not full_text.startswith("Video Content") and not full_text.startswith("Audio Content") else ""
+            if not podcast_source:
+                # Fallback: use summary
+                import json
+                try:
+                    summary_data = json.loads(ai_response)
+                    podcast_source = summary_data.get('summary', '')
+                except:
+                    pass
+            
+            if podcast_source:
+                # Generate podcast
+                script = CognitiveService.generate_podcast_script(podcast_source[:15000], payload.user_profile)
+                
+                # Save to Firestore
+                db.collection('lectures').document(f"{payload.user_id}_{video_id}").update({
+                    'podcast_script': script,
+                    'podcast_status': 'ready',
+                    'podcast_generated_at': firestore.SERVER_TIMESTAMP
+                })
+            else:
+                raise Exception("No valid source content for podcast generation")
+                
+        except Exception as e:
+            print(f"Async podcast generation failed: {e}")
+            db.collection('lectures').document(f"{payload.user_id}_{video_id}").update({
+                'podcast_status': 'failed',
+                'podcast_error': str(e)
+            })
+    
+    # Start background thread
+    thread = threading.Thread(target=generate_podcast_async)
+    thread.daemon = True  # Thread dies when main process ends
+    thread.start()
     
     return {
         "status": "success", 
         "lecture_id": video_id, 
         "content": ai_response,
         "transcript_context": full_text[:5000],
-        "podcast_script": podcast_script
+        "podcast_status": "pending"  # Indicate podcast is being generated in background
     }
 
 @app.post("/api/v1/generate-podcast")
 async def generate_podcast_endpoint(payload: PodcastRequest):
     script = CognitiveService.generate_podcast_script(payload.transcript_text, payload.user_profile)
     return {"script": script}
-    return {"status": "success", "script": CognitiveService.generate_podcast_script(payload.transcript_text)}
+
+@app.get("/api/v1/podcast-status/{user_id}/{lecture_id}")
+async def check_podcast_status(user_id: str, lecture_id: str):
+    """Check if podcast is ready"""
+    try:
+        doc = db.collection('lectures').document(f"{user_id}_{lecture_id}").get()
+        if not doc.exists:
+            raise HTTPException(status_code=404, detail="Lecture not found")
+        
+        data = doc.to_dict()
+        return {
+            "status": data.get('podcast_status', 'unknown'),
+            "script": data.get('podcast_script', ''),
+            "error": data.get('podcast_error')
+        }
+    except Exception as e:
+        print(f"Error checking podcast status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/v1/ask-doubt")
 async def solve_doubt(payload: DoubtQuery):

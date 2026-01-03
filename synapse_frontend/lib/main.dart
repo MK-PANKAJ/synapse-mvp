@@ -52,6 +52,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   bool _isLoading = false;
   bool _isPodcastLoading = false;
+  bool _isPodcastGenerating = false;
+  Timer? _podcastPollTimer;
   
   final String userID = "student_01"; 
   // NOTE: Replace with 10.0.2.2 for Emulator or Cloud Run URL for Production
@@ -136,7 +138,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _focusPoints = [];
              }
              _currentMermaidCode = aiContent['mermaid_diagram']?.toString() ?? "";
-             _currentPodcastScript = data['podcast_script']?.toString() ?? "";
+             
+             // Handle podcast script if available, or start polling if pending
+             if (data['podcast_status'] == 'pending') {
+                 _currentPodcastScript = "";
+                 _isPodcastGenerating = true;
+                 _startPodcastPolling();
+             } else if (data['podcast_script'] != null) {
+                 _currentPodcastScript = data['podcast_script'];
+                 _isPodcastGenerating = false;
+             }
+             
              _isLoading = false;
              _tabController?.animateTo(0);
          });
@@ -233,6 +245,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
         print(e);
     }
     setState(() => _isPodcastLoading = false);
+  }
+
+  void _startPodcastPolling() {
+    _podcastPollTimer?.cancel();
+    
+    _podcastPollTimer = Timer.periodic(Duration(seconds: 3), (timer) async {
+        if (!_isPodcastGenerating) {
+            timer.cancel();
+            return;
+        }
+        
+        try {
+            final response = await http.get(
+                Uri.parse('$backendUrl/api/v1/podcast-status/$userID/$_currentVideoId')
+            );
+            
+            if (response.statusCode == 200) {
+                final data = jsonDecode(response.body);
+                
+                if (data['status'] == 'ready') {
+                    setState(() {
+                        _currentPodcastScript = data['script'];
+                        _isPodcastGenerating = false;
+                    });
+                    timer.cancel();
+                } else if (data['status'] == 'failed') {
+                    setState(() {
+                        _currentPodcastScript = "Podcast generation failed: ${data['error']}";
+                        _isPodcastGenerating = false;
+                    });
+                    timer.cancel();
+                }
+            }
+        } catch (e) {
+            print("Polling error: $e");
+        }
+    });
+  }
+  
+  @override
+  void dispose() {
+    _podcastPollTimer?.cancel();
+    super.dispose();
   }
 
   void _openDoubtModal() {
@@ -460,6 +515,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 content: _currentPodcastScript,
                                                 onGenerate: _generatePodcast,
                                                 isLoading: _isPodcastLoading,
+                                                isGenerating: _isPodcastGenerating,
                                             )
                                         ]
                                     )

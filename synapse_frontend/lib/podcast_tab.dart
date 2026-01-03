@@ -6,8 +6,14 @@ class PodcastTab extends StatefulWidget {
   final String content; 
   final Function onGenerate; 
   final bool isLoading;
+  final bool isGenerating;  // NEW: For async background generation
 
-  PodcastTab({required this.content, required this.onGenerate, required this.isLoading});
+  PodcastTab({
+    required this.content, 
+    required this.onGenerate, 
+    required this.isLoading,
+    this.isGenerating = false,
+  });
 
   @override
   _PodcastTabState createState() => _PodcastTabState();
@@ -71,6 +77,22 @@ class _PodcastTabState extends State<PodcastTab> {
 
   @override
   Widget build(BuildContext context) {
+    // Show generating state if podcast is being created in background
+    if (widget.isGenerating) {
+        return Center(
+            child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text("Crafting your podcast... 🎙️", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 8),
+                    Text("This usually takes 30-60 seconds", style: TextStyle(color: Colors.grey, fontSize: 14)),
+                ],
+            ),
+        );
+    }
+    
     if (widget.isLoading) {
       return Center(child: CircularProgressIndicator());
     }
