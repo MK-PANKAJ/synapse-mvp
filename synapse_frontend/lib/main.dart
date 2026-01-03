@@ -68,18 +68,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           "video_url": _urlController.text,
           "user_profile": _selectedProfile
         }),
-      ).timeout(Duration(seconds: 90)); // Timeout at 1.5 mins (User feedback: 5m is too long)
+      ).timeout(Duration(seconds: 90));
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        // Defensive: safely get summary_data OR content (backend uses 'content')
+        // Defensive: safely get summary_data OR content
         String rawSummaryJson = (data['summary_data'] ?? data['content'] ?? "").toString();
-        
-        // Clean markdown
         rawSummaryJson = rawSummaryJson.replaceAll("```json", "").replaceAll("```", "").trim();
         
-        // Decode inner JSON
         Map<String, dynamic> aiContent = {};
         try {
             if (rawSummaryJson.startsWith("{")) {
@@ -90,43 +87,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
         } catch (e) {
             print("Inner JSON Parse Error: $e");
             
-            // REGEX FALLBACK: Manually extract fields if JSON is slightly broken
             String summaryVal = "";
             try {
-                // Extract summary: "summary": "(...)"
                 final sumMatch = RegExp(r'"summary":\s*"(.*?)(?<!\\)"', dotAll: true).firstMatch(rawSummaryJson);
                 if (sumMatch != null) summaryVal = sumMatch.group(1) ?? "";
             } catch (_) {}
             
             if (summaryVal.isNotEmpty) {
-                 // Unescape basic JSON characters for readable text
-                 // FIX: Aggressively replace \\n with actual newlines and unescape $
                  summaryVal = summaryVal.replaceAll(r'\\n', '\n').replaceAll(r'\n', '\n').replaceAll(r'\"', '"').replaceAll(r'\\$', r'$');
                  aiContent['summary'] = summaryVal;
             } else {
-                 aiContent['summary'] = rawSummaryJson; // Ultimate fallback
+                 aiContent['summary'] = rawSummaryJson;
             }
             
-            // Extract Focus Points
              try {
                 final focusMatch = RegExp(r'"focus_points":\s*\[(.*?)\]', dotAll: true).firstMatch(rawSummaryJson);
                 if (focusMatch != null) {
-                    final rawList = focusMatch.group(1)!;
-                    // Split by comma+quote to roughly get items
-                    final items = rawList.split(RegExp(r'",\s*"'));
+                    final items = focusMatch.group(1)!.split(RegExp(r'",\s*"'));
                     aiContent['focus_points'] = items.map((s) => s.replaceAll('"', '').trim()).toList();
                 }
             } catch (_) {}
 
-            // Extract Mermaid
             try {
                  final merMatch = RegExp(r'"mermaid_diagram":\s*"(.*?)(?<!\\)"', dotAll: true).firstMatch(rawSummaryJson);
                  if (merMatch != null) {
                      String rawMermaid = merMatch.group(1)?.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"') ?? "";
-                     // SANITIZER: 
-                     // 1. Remove HTML tags
-                     // 2. Fix Smart Quotes (” -> ") which break the renderer
-                     // 3. Fix literal newlines (\n -> actual newline)
                      _mermaidCode = rawMermaid
                         .replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: false), "")
                         .replaceAll('”', '"')
@@ -135,28 +120,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                      aiContent['mermaid_diagram'] = _mermaidCode;
                  }
             } catch (_) {}
-            
-             setState(() {
-                 _currentVideoId = data['lecture_id']?.toString() ?? "";
-                 _transcriptContext = data['transcript_context']?.toString() ?? "";
-                 _currentSummary = aiContent['summary']?.toString() ?? "No summary available.";
-                 
-                 // Safe List Conversion
-                 var rawFocus = aiContent['focus_points'];
-                 if (rawFocus is List) {
-                    _focusPoints = rawFocus.map((e) => e.toString()).toList();
-                 } else {
-                    _focusPoints = [];
-                 }
-                 _currentMermaidCode = aiContent['mermaid_diagram']?.toString() ?? "";
-                 _isLoading = false;
-                 
-                 // Show Summary Tab automatically
-                 _tabController?.animateTo(0);
-             });
-        } else {
-             setState(() => _currentSummary = "Server Error (${response.statusCode}): ${response.body}");
         }
+
+         setState(() {
+             _currentVideoId = data['lecture_id']?.toString() ?? "";
+             _transcriptContext = data['transcript_context']?.toString() ?? "";
+             _currentSummary = aiContent['summary']?.toString() ?? "No summary available.";
+             
+             var rawFocus = aiContent['focus_points'];
+             if (rawFocus is List) {
+                _focusPoints = rawFocus.map((e) => e.toString()).toList();
+             } else {
+                _focusPoints = [];
+             }
+             _currentMermaidCode = aiContent['mermaid_diagram']?.toString() ?? "";
+             _isLoading = false;
+             _tabController?.animateTo(0);
+         });
+      } else {
+        setState(() => _currentSummary = "Server Error (${response.statusCode}): ${response.body}");
+      }
     } catch (e) {
       String errorMsg = e.toString();
       if (errorMsg.contains("Timeout")) {
