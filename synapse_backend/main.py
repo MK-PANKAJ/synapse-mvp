@@ -66,17 +66,18 @@ TASK: Analyze the transcript and extract structured learning data.
 1. Create a "Learning Card Summary" (Markdown).
 2. Extract 5-7 "Focus Points" (Micro-summaries: punchy, emoji-bullet points, max 10 words each) to help the student maintain attention.
 
+
 OUTPUT JSON FORMAT:
 {{
     "summary": "...markdown content...",
     "focus_points": ["⚡ Point 1", "🧠 Point 2", ...],
-    "focus_points": ["⚡ Point 1", "🧠 Point 2", ...],
     "mermaid_diagram": "graph TD; A[Concept] --> B[Result]; ..." 
-    (Optional. RULES for Mermaid: 
-     1. Use 'graph TD'.
-     2. NO HTML tags (like <sub>, <b>). Use plain text.
-     3. Remove special characters from node IDs (e.g. use 'Node1' not 'Node(1)').
-     4. Use quotes for labels with spaces: id["Label Text"].)
+    (REQUIRED. RULES for Mermaid: 
+     1. ALWAYS create a diagram, even if simple. 
+     2. Use 'graph TD'.
+     3. NO HTML tags (like <sub>, <b>). Use plain text.
+     4. Remove special characters from node IDs (e.g. use 'Node1' not 'Node(1)').
+     5. Use quotes for labels with spaces: id["Label Text"].)
 }}
 """
 
