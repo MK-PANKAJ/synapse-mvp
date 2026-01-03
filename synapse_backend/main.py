@@ -69,7 +69,13 @@ OUTPUT JSON FORMAT:
 {{
     "summary": "...markdown content...",
     "focus_points": ["⚡ Point 1", "🧠 Point 2", ...],
-    "mermaid_diagram": "graph TD; A[Concept] --> B[Result]; ..." (Optional, send blank string if not applicable)
+    "focus_points": ["⚡ Point 1", "🧠 Point 2", ...],
+    "mermaid_diagram": "graph TD; A[Concept] --> B[Result]; ..." 
+    (Optional. RULES for Mermaid: 
+     1. Use 'graph TD'.
+     2. NO HTML tags (like <sub>, <b>). Use plain text.
+     3. Remove special characters from node IDs (e.g. use 'Node1' not 'Node(1)').
+     4. Use quotes for labels with spaces: id["Label Text"].)
 }}
 """
 
