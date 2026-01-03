@@ -4,6 +4,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:html' as html;
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:markdown/markdown.dart' as md;
+import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'podcast_tab.dart';
@@ -295,7 +297,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 padding: EdgeInsets.all(16),
                                                 margin: EdgeInsets.symmetric(vertical: 8),
                                                 decoration: BoxDecoration(color: Colors.indigo.shade50, borderRadius: BorderRadius.circular(8)),
-                                                child: SingleChildScrollView(child: MarkdownBody(data: _currentSummary))
+                                                child: SingleChildScrollView(
+                                                    child: MarkdownBody(
+                                                        data: _currentSummary,
+                                                        builders: {
+                                                            'latex': LatexElementBuilder(),
+                                                        },
+                                                        extensionSet: md.ExtensionSet(
+                                                            [
+                                                                md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+                                                                [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes, LatexSyntax()]
+                                                            ].expand((x) => x).toList(),
+                                                            md.ExtensionSet.gitHubFlavored.contentSyntaxes
+                                                        ),
+                                                    )
+                                                )
                                             ),
                                             
                                             // FOCUS TAB (FORMERLY BINGO)
@@ -356,7 +372,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                             child: Text("View Source Code"),
                                                             onPressed: () {
                                                                 showDialog(context: context, builder: (ctx) => AlertDialog(
-                                                                    content: SingleChildScrollView(child: SelectableText(_mermaidCode))
+                                                                    content: SingleChildScrollView(
+                                                                        child: MarkdownBody(
+                                                                            data: _mermaidCode,
+                                                                            builders: {
+                                                                                'latex': LatexElementBuilder(),
+                                                                            },
+                                                                            extensionSet: md.ExtensionSet(
+                                                                                [
+                                                                                    md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+                                                                                    [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes, LatexSyntax()]
+                                                                                ].expand((x) => x).toList(),
+                                                                                md.ExtensionSet.gitHubFlavored.contentSyntaxes
+                                                                            ),
+                                                                        )
+                                                                    )
                                                                 ));
                                                             } 
                                                         )
@@ -365,6 +395,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ),
                                             
                                             // PODCAST TAB
+
+
                                             PodcastTab(
                                                 content: _currentPodcastScript,
                                                 onGenerate: _generatePodcast,
