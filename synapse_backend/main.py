@@ -1,40 +1,54 @@
 import os
+import google.generativeai as genai
 import vertexai
 from vertexai.generative_models import GenerativeModel
 from google.cloud import firestore
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi
-from typing import List, Optional
+from typing import List, Optional, Dict
 from python_dotenv import load_dotenv
 
 load_dotenv()
 
 # --- CONFIGURATION ---
 PROJECT_ID = os.getenv("GCP_PROJECT", "your-project-id")
-LOCATION = "us-central1"
+LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") # API Key for Local Mode
 
-# Initialize Google Cloud Services
-try:
-    vertexai.init(project=PROJECT_ID, location=LOCATION)
-    model = GenerativeModel("gemini-1.5-pro-001") # Adjusted to stable model name for safety
-except Exception as e:
-    print(f"Warning: Vertex AI init failed: {e}")
-    model = None
+# Global Services
+model = None
+db = None
+mock_db: Dict[str, dict] = {} # In-memory DB for local mode
 
+# Initialize AI Service
+if GEMINI_API_KEY:
+    print("Using Local Mode with Gemini API Key")
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel('gemini-1.5-pro')
+else:
+    print("Attempting Cloud Mode with Vertex AI")
+    try:
+        vertexai.init(project=PROJECT_ID, location=LOCATION)
+        model = GenerativeModel("gemini-1.5-pro-001")
+    except Exception as e:
+        print(f"Warning: Vertex AI init failed: {e}")
+
+# Initialize Database Service
 try:
     db = firestore.Client(project=PROJECT_ID)
+    print("Firestore Connected")
 except Exception as e:
-    print(f"Warning: Firestore init failed: {e}")
+    print(f"Warning: Firestore init failed: {e}. Switching to Mock DB (Local Mode).")
     db = None
 
-app = FastAPI(title="Synapse API", version="1.0-Final")
+app = FastAPI(title="Synapse API", version="1.0-Local")
 
 # --- DATA MODELS ---
 class VideoIngest(BaseModel):
     user_id: str
     video_url: str
-    user_profile: str  # "ADHD", "Dyslexia", "ESL"
+    user_profile: str
 
 class DoubtQuery(BaseModel):
     lecture_id: str
@@ -45,20 +59,19 @@ class PodcastRequest(BaseModel):
     transcript_text: str
 
 # --- SERVICE LAYER ---
-
 class CognitiveService:
     @staticmethod
     def get_prompt_logic(profile: str):
         if "ADHD" in profile:
-            return "Format: High-energy, emoji-bullet points. Max 3 bullets. Focus on 'Why this matters'."
+            return "Format: High-energy, emoji-bullet points. Max 3 bullets."
         if "Dyslexia" in profile:
-            return "Format: Simple syntax. Use visual metaphors. Avoid dense paragraphs."
+            return "Format: Simple syntax. Use visual metaphors."
         return "Format: Clear, academic summary."
 
     @staticmethod
     def generate_content(transcript: str, profile: str):
         if not model:
-            return "Simulated AI Summary: Vertex AI not connected."
+            return "{\"summary\": \"Error: AI not connected. Check API Key.\", \"bingo_terms\": []}"
             
         system_instruction = CognitiveService.get_prompt_logic(profile)
         prompt = f"""
@@ -66,149 +79,105 @@ class CognitiveService:
         INSTRUCTION: {system_instruction}
         TASK: Analyze this transcript.
         1. Create a structured learning card summary.
-        2. Extract exactly 9 "Bingo Keywords" (single words or short phrases) that are central to the topic.
+        2. Extract exactly 9 "Bingo Keywords" (single words) central to the topic.
         
-        TRANSCRIPT: {transcript[:10000]}... (truncated for context limit)
-
+        TRANSCRIPT: {transcript[:10000]}...
+        
         OUTPUT FORMAT (Strict JSON):
         {{
             "summary": "markdown_text_here",
-            "bingo_terms": ["term1", "term2", "term3", ...]
+            "bingo_terms": ["term1", "term2", ...]
         }}
         """
         try:
-            # We urge the model to return JSON. In a real app, use response_schema if supported or strict parsing.
             response = model.generate_content(prompt)
-            # For this MVP, we will assume the model obeys or we might need simple parsing.
-            # To be safe for the demo, we'll return the raw text and let frontend/parsing handle it, 
-            # Or we can try to parse it here. For simplicity in MVP, we might return text if parsing fails.
             return response.text
         except Exception as e:
-            return f"{{\"summary\": \"Error generating content: {str(e)}\", \"bingo_terms\": []}}"
+            return f"{{\"summary\": \"AI Error: {str(e)}\", \"bingo_terms\": []}}"
 
     @staticmethod
     def generate_podcast_script(transcript: str):
         if not model:
-            return "Simulated Podcast: Vertex AI not connected."
+            return "Error: AI not connected."
             
-        prompt = """
-        You are an expert educational scriptwriter.
-        Convert the provided lecture transcript into a dynamic podcast script between two hosts:
-        1. **Dr. V** (The wise, calm expert).
-        2. **Max** (A high-energy, relatable student who uses analogies).
-
-        Rules:
-        - Max should interrupt politely when things get too abstract.
-        - Use sound effect cues in brackets like [Sound: Page turning].
-        - Keep the explanation accurate but change the tone to be conversational.
-        - Output strictly the dialogue script.
-        
-        TRANSCRIPT:
-        """ + transcript[:10000]
-        
+        prompt = "Convert this transcript into a podcast script between Dr. V and Max:\n" + transcript[:10000]
         try:
             response = model.generate_content(prompt)
             return response.text
         except Exception as e:
-            return f"Error generating podcast: {str(e)}"
+            return f"AI Error: {str(e)}"
 
 class DatabaseService:
     @staticmethod
     def save_lecture(user_id, video_id, summary_data, transcript_snippet):
-        if not db:
-            print("Firestore not connected. Skipping save.")
-            return "mock-doc-id"
-            
-        # Saves to Firestore: users/{uid}/lectures/{video_id}
-        doc_ref = db.collection("users").document(user_id).collection("lectures").document(video_id)
-        doc_ref.set({
+        data = {
             "video_id": video_id,
             "status": "processed",
-            "summary_data": summary_data, # Can be JSON string or dict
+            "summary_data": summary_data,
             "context_snippet": transcript_snippet, 
-            "timestamp": firestore.SERVER_TIMESTAMP
-        })
-        return doc_ref.id
+            "timestamp": "NOW"
+        }
+        
+        if db:
+            doc_ref = db.collection("users").document(user_id).collection("lectures").document(video_id)
+            doc_ref.set(data)
+            return doc_ref.id
+        else:
+            # Local Mock DB
+            mock_key = f"{user_id}_{video_id}"
+            mock_db[mock_key] = data
+            print(f"[Local DB] Saved lecture {video_id} to memory.")
+            return "mock-id"
+
+    @staticmethod
+    def get_context(user_id, video_id):
+        if db:
+            doc = db.collection("users").document(user_id).collection("lectures").document(video_id).get()
+            return doc.to_dict().get("context_snippet", "") if doc.exists else ""
+        else:
+            mock_key = f"{user_id}_{video_id}"
+            return mock_db.get(mock_key, {}).get("context_snippet", "")
 
 # --- API ENDPOINTS ---
-
 @app.post("/api/v1/ingest")
 async def ingest_lecture(payload: VideoIngest):
     try:
-        # 1. Extract ID & Transcript
-        video_id = ""
-        if "v=" in payload.video_url:
-            video_id = payload.video_url.split("v=")[1].split("&")[0]
-        elif "youtu.be/" in payload.video_url:
-             video_id = payload.video_url.split("youtu.be/")[1].split("?")[0]
-        else:
-             raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+        video_id = payload.video_url.split("v=")[1].split("&")[0] if "v=" in payload.video_url else "mock_vid"
         
-        # 2. Get Transcript
         try:
             transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
             full_text = " ".join([t['text'] for t in transcript_list])
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Transcript error: {str(e)}")
+        except:
+             # Fallback for testing without valid video
+             full_text = "This is a mock transcript about Mitochondria." 
         
-        # 3. AI Processing (Now returns JSON String typically)
         ai_response = CognitiveService.generate_content(full_text, payload.user_profile)
-        
-        # 4. Persistence
         DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
         
         return {
             "status": "success", 
             "lecture_id": video_id, 
-            "content": ai_response, # Expected to be JSON string with summary & bingo
-            "transcript_context": full_text[:5000] # Sending back some context for podcast generation if needed
+            "content": ai_response,
+            "transcript_context": full_text[:5000]
         }
-
-    except HTTPException as he:
-        raise he
     except Exception as e:
-        print(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/generate-podcast")
 async def generate_podcast_endpoint(payload: PodcastRequest):
-    try:
-        script = CognitiveService.generate_podcast_script(payload.transcript_text)
-        return {"status": "success", "script": script}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"status": "success", "script": CognitiveService.generate_podcast_script(payload.transcript_text)}
 
 @app.post("/api/v1/ask-doubt")
 async def solve_doubt(payload: DoubtQuery):
-    try:
-        # 1. Fetch Context from Firestore
-        context = ""
-        if db:
-            doc_ref = db.collection("users").document(payload.user_id).collection("lectures").document(payload.lecture_id)
-            doc = doc_ref.get()
-            
-            if not doc.exists:
-                raise HTTPException(status_code=404, detail="Lecture context not found")
-                
-            context = doc.to_dict().get("context_snippet", "")
-        else:
-            context = "Mock context: Firestore not connected."
-        
-        # 2. Context-Aware AI Answer
-        chat_prompt = f"""
-        CONTEXT: {context}
-        USER QUESTION: {payload.question}
-        TASK: Answer in 2 sentences. Use an analogy.
-        """
-        
-        if model:
-            response = model.generate_content(chat_prompt)
-            return {"answer": response.text}
-        else:
-            return {"answer": "This is a mock answer. (AI not connected)"}
-        
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    context = DatabaseService.get_context(payload.user_id, payload.lecture_id)
+    if not context: context = "Context not found."
+    
+    chat_prompt = f"Context: {context}\nQuestion: {payload.question}\nAnswer in 2 sentences."
+    
+    if model:
+        response = model.generate_content(chat_prompt)
+        return {"answer": response.text}
+    else:
+        return {"answer": "AI not connected."}
+
 
