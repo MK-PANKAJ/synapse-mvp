@@ -8,4 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD exec uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
+# Expose the port (good practice for Cloud Run)
+EXPOSE 8080
+
+# Use list syntax to ensure variables are passed correctly via shell or direct execution
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
