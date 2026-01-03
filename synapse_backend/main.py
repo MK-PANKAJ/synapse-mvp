@@ -5,6 +5,7 @@ from google.cloud import firestore, storage
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi
+import yt_dlp
 from typing import List, Optional, Dict
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
@@ -126,9 +127,10 @@ class CognitiveService:
             if video_uri:
                 # MULTIMODAL MODE (Video + Text Prompt)
                 print(f"DEBUG: Processing Video from {video_uri}")
-                video_part = Part.from_uri(uri=video_uri, mime_type="video/mp4")
+                mime_type = "audio/mp3" if video_uri.endswith(".mp3") else "video/mp4"
+                video_part = Part.from_uri(uri=video_uri, mime_type=mime_type)
                 inputs.append(video_part)
-                inputs.append("Analyze this video lecture.")
+                inputs.append("Analyze this content.")
             else:
                 # TEXT MODE (Transcript Only)
                 inputs.append(f"\n\nTRANSCRIPT:\n{transcript[:25000]}...") # Increased limit for text
@@ -208,11 +210,32 @@ async def ingest_lecture(payload: VideoIngest):
         try:
             transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
             full_text = " ".join([t['text'] for t in transcript_list])
+            ai_response = CognitiveService.generate_content(full_text, payload.user_profile)
         except Exception as e:
-                print(f"Transcript Error: {e}")
-                raise HTTPException(status_code=400, detail="Could not retrieve transcript. The video might not have captions enabled.") 
-        
-        ai_response = CognitiveService.generate_content(full_text, payload.user_profile)
+            print(f"Transcript Failed ({e}). Attempting Audio Fallback...")
+            # FALLBACK: Download Audio -> GCS -> Gemini
+            try:
+                ydl_opts = {
+                    'format': 'bestaudio/best',
+                    'outtmpl': f'/tmp/{video_id}.%(ext)s',
+                    'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3',}],
+                    'quiet': True
+                }
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([payload.video_url])
+                
+                # Upload to GCS
+                bucket = storage_client.bucket(BUCKET_NAME)
+                blob = bucket.blob(f"audio_cache/{video_id}.mp3")
+                blob.upload_from_filename(f"/tmp/{video_id}.mp3")
+                
+                audio_uri = f"gs://{BUCKET_NAME}/audio_cache/{video_id}.mp3"
+                full_text = "Audio Content (Processed via Multimodal AI)"
+                ai_response = CognitiveService.generate_content("", payload.user_profile, video_uri=audio_uri)
+                
+            except Exception as dl_error: 
+                print(f"Audio Fallback Failed: {dl_error}")
+                raise HTTPException(status_code=400, detail="Could not retrieve transcript AND Audio Download failed. Video is likely private or age-restricted.")
 
     DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
     

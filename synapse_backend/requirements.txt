@@ -8,3 +8,4 @@ python-multipart
 python-dotenv
 google-generativeai
 google-cloud-storage
+yt-dlp
