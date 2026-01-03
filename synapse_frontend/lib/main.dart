@@ -100,7 +100,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             
             if (summaryVal.isNotEmpty) {
                  // Unescape basic JSON characters for readable text
-                 summaryVal = summaryVal.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"');
+                 // FIX: Also unescape \$ to $ for LaTeX rendering
+                 summaryVal = summaryVal.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"').replaceAll(r'\\$', r'$');
                  aiContent['summary'] = summaryVal;
             } else {
                  aiContent['summary'] = rawSummaryJson; // Ultimate fallback
@@ -121,7 +122,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             try {
                  final merMatch = RegExp(r'"mermaid_diagram":\s*"(.*?)(?<!\\)"', dotAll: true).firstMatch(rawSummaryJson);
                  if (merMatch != null) {
-                     aiContent['mermaid_diagram'] = merMatch.group(1)?.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"') ?? "";
+                     String rawMermaid = merMatch.group(1)?.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"') ?? "";
+                     // SANITIZER: Remove HTML tags (like <sub>, <br>) as they break mermaid.ink
+                     _mermaidCode = rawMermaid.replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: false), "");
+                     aiContent['mermaid_diagram'] = _mermaidCode;
                  }
             } catch (_) {}
         }
