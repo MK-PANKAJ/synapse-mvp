@@ -304,11 +304,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                             'latex': LatexElementBuilder(),
                                                         },
                                                         extensionSet: md.ExtensionSet(
-                                                            [
-                                                                md.ExtensionSet.gitHubFlavored.blockSyntaxes,
-                                                                [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes, LatexSyntax()]
-                                                            ].expand((x) => x).toList(),
-                                                            md.ExtensionSet.gitHubFlavored.contentSyntaxes
+                                                            md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+                                                            [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes, LatexSyntax()]
                                                         ),
                                                     )
                                                 )
@@ -522,6 +519,39 @@ class _DoubtSheetState extends State<DoubtSheet> {
           )
         ],
       ),
+    );
+  }
+  }
+}
+
+// --- CUSTOM SYNTAX FOR LATEX ($...$) ---
+
+class LatexSyntax extends md.InlineSyntax {
+  LatexSyntax() : super(r'(\$\$[\s\S]*?\$\$)|(\$[^$]*?\$)');
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    String raw = match.group(0)!;
+    bool isBlock = raw.startsWith(r'$$');
+    String content = isBlock ? raw.substring(2, raw.length - 2) : raw.substring(1, raw.length - 1);
+    
+    md.Element el = md.Element.text('latex', content);
+    el.attributes['style'] = isBlock ? 'block' : 'inline';
+    parser.addNode(el);
+    return true;
+  }
+}
+
+class LatexElementBuilder extends MarkdownElementBuilder {
+  @override
+  Widget? visitElement(md.Element element, TextStyle? preferredStyle) {
+    final String content = element.textContent;
+    final bool isBlock = element.attributes['style'] == 'block';
+
+    return Math.tex(
+        content,
+        textStyle: preferredStyle?.copyWith(fontFamily: 'SansSerif'),
+        mathStyle: isBlock ? MathStyle.display : MathStyle.text,
     );
   }
 }
