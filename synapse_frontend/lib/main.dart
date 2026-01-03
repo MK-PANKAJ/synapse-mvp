@@ -45,6 +45,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _currentVideoId = "";
   String _transcriptContext = "";
   String _mermaidCode = "";
+  String _currentMermaidCode = "";
+  TabController? _tabController;
   String _selectedProfile = "ADHD"; // Default
   final List<String> _profiles = ["ADHD", "Dyslexia", "Visual", "Hinglish"];
   
