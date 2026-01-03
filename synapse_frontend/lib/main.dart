@@ -289,7 +289,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                         ),
                                                     );
                                                 }
-                                                }
                                             ),
 
                                             // VISUAL TAB
