@@ -209,26 +209,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ),
                                             
                                             // PODCAST TAB
-                                            Column(
-                                                children: [
-                                                    SizedBox(height: 10),
-                                                    ElevatedButton.icon(
-                                                        onPressed: _isPodcastLoading ? null : _generatePodcast, 
-                                                        icon: Icon(Icons.auto_awesome), 
-                                                        label: Text("Generate AI Podcast Script")
-                                                    ),
-                                                    Expanded(
-                                                        child: _isPodcastLoading 
-                                                        ? Center(child: CircularProgressIndicator()) 
-                                                        : Container(
-                                                            width: double.infinity,
-                                                            margin: EdgeInsets.only(top: 10),
-                                                            padding: EdgeInsets.all(16),
-                                                            decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(8)),
-                                                            child: SingleChildScrollView(child: Text(_currentPodcastScript.isEmpty ? "Tap button to generate!" : _currentPodcastScript))
-                                                        )
-                                                    )
-                                                ],
+                                            PodcastTab(
+                                                content: _currentPodcastScript,
+                                                onGenerate: _generatePodcast,
+                                                isLoading: _isPodcastLoading,
                                             )
                                         ]
                                     )
