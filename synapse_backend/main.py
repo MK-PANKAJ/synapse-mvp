@@ -77,18 +77,49 @@ class PodcastRequest(BaseModel):
     transcript_text: str
 
 # --- SERVICE LAYER ---
+# --- AI PERSONALITY CONFIGURATION ---
+SYSTEM_PROMPT_TEMPLATE = """
+You are an Expert Educational Neuro-adapter.
+BASE INSTRUCTION: Make it extremely simple (ELIF5). Use analogies.
+PROFILE ADAPTATION: {profile_instruction}
+
+TASK: Analyze the transcript and extract structured learning data.
+1. Create a "Learning Card Summary" (Markdown).
+2. Extract exactly 9 "Bingo Keywords".
+
+OUTPUT JSON FORMAT:
+{{
+    "summary": "...markdown content...",
+    "bingo_terms": ["term1", "term2", ...]
+}}
+"""
+
+PODCAST_PROMPT_TEMPLATE = """
+You are 'Synapse FM', a viral study podcast.
+Convert the transcript into a fun, Hinglish (Hindi+English) conversation.
+
+CHARACTERS:
+1. **Dr. V** (The Expert): Calm, academic, speaks mostly English.
+2. **Max** (The Student): High energy, curious, uses Gen-Z Hinglish slang (e.g., "Arre sir", "Op bhai", "Matlab?").
+
+RULES:
+- Keep it under 2 minutes.
+- Max asks the "dumb" questions everyone is thinking.
+- Use analogies.
+- NO Sound Effects.
+"""
+
+# --- SERVICE LAYER ---
 class CognitiveService:
     @staticmethod
     def get_prompt_logic(profile: str):
-        base_instruction = "Make it extremely simple (ELIF5). Use analogies."
-        if "Hinglish" in profile or "Hindi" in profile:
-            base_instruction += " Explain in mixed Hindi-English (Hinglish) for an Indian student."
-        
+        if "Hinglish" in profile:
+            return "Explain in mixed Hindi-English for an Indian Gen-Z student."
         if "ADHD" in profile:
-            return base_instruction + " Format: High-energy, emoji-bullet points. Max 3 bullets."
+            return "Format: High-energy, emoji-bullet points. Short sentences."
         if "Dyslexia" in profile:
-            return base_instruction + " Format: Simple syntax. Use visual metaphors."
-        return base_instruction + " Format: Clear, academic summary."
+            return "Format: Simple syntax. Visual metaphors. No walls of text."
+        return "Format: Clear, academic summary."
 
     @staticmethod
     def generate_content(transcript: str, profile: str):
@@ -97,8 +128,11 @@ class CognitiveService:
             print("DEBUG: Model is None! Returning error.")
             return "{\"summary\": \"Error: AI not connected. Check API Key.\", \"bingo_terms\": []}"
             
-        system_instruction = CognitiveService.get_prompt_logic(profile)
-        # ... (rest of prompt construction)
+        profile_instruction = CognitiveService.get_prompt_logic(profile)
+        # Inject Profile into Template
+        prompt = SYSTEM_PROMPT_TEMPLATE.format(profile_instruction=profile_instruction)
+        prompt += f"\n\nTRANSCRIPT:\n{transcript[:10000]}..."
+        
         try:
             print("DEBUG: Sending request to Vertex AI...")
             response = model.generate_content(prompt)
@@ -113,22 +147,7 @@ class CognitiveService:
         if not model:
             return "Error: AI not connected."
             
-        prompt = """
-        You are 'Synapse FM', a study podcast.
-        Convert the transcript into a fun, Hinglish (Hindi+English) conversation between:
-        1. **Dr. V** (Serious expert, speaks mostly English).
-        2. **Max** (Curious student, speaks funny Hinglish slang like 'Arre sir', 'Matlab kya?').
-
-        Rules:
-        - Keep it short (approx 2 minutes reading time).
-        - Max checks understanding often.
-        - IMPORTANT: Do NOT include [Sound Effects]. Just the dialogue.
-        - Format: 
-        Dr. V: ...
-        Max: ...
-        
-        TRANSCRIPT:
-        """ + transcript[:10000]
+        prompt = PODCAST_PROMPT_TEMPLATE + f"\n\nTRANSCRIPT:\n{transcript[:10000]}"
         
         try:
             response = model.generate_content(prompt)
