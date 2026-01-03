@@ -188,7 +188,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  }
+
 
   void _launchMermaidEditor() async {
       if (_mermaidCode.isEmpty) return;
