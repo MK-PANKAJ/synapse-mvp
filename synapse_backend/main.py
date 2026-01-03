@@ -28,8 +28,9 @@ print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
 try:
     # 1. Vertex AI
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    # Using explicit version -001 to avoid 404 on alias
-    model = GenerativeModel("gemini-1.5-flash-001")
+    # Gemini 1.5 is EOL (May 2025). Using Gemini 2.0 Flash which is stable in 2026.
+    # Note: Retry logic handles strict quotas.
+    model = GenerativeModel("gemini-2.0-flash")
     print("SUCCESS: Vertex AI Initialized.")
 
     # 2. Firestore
