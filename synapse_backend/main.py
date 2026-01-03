@@ -23,7 +23,7 @@ print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
 try:
     # 1. Vertex AI
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    model = GenerativeModel("gemini-1.5-flash")
+    model = GenerativeModel("gemini-2.5-flash")
     print("SUCCESS: Vertex AI Initialized.")
 
     # 2. Firestore
