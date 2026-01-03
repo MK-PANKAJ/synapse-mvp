@@ -221,7 +221,7 @@ async def ingest_lecture(payload: VideoIngest):
             
             # Prefer English, but take anything we can find
             try:
-                transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB'])
+                transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB', 'hi', 'hi-IN'])
             except:
                 # If no English, just take the first one available (e.g. Hindi, Spanish)
                 transcript = next(iter(transcript_list))
