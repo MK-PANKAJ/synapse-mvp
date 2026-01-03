@@ -55,10 +55,14 @@ class _PodcastTabState extends State<PodcastTab> {
             await flutterTts.setSpeechRate(0.5);
         }
         
-        // Speak the clean text (remove bold markers if you want, but TTS usually ignores them)
-        // Await completion of this line before starting the next
-        await flutterTts.awaitSpeakCompletion(true);
-        await flutterTts.speak(line);
+        // Speak the clean text 
+        // FILTER: Remove stage directions in (), [], or **
+        String textToSpeak = line.replaceAll(RegExp(r'\(.*?\)|\[.*?\]|\*.*?\*'), "").trim();
+        
+        if (textToSpeak.isNotEmpty) {
+             await flutterTts.awaitSpeakCompletion(true);
+             await flutterTts.speak(textToSpeak);
+        }
       }
       
       if (mounted) setState(() => isPlaying = false);
