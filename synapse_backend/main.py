@@ -22,17 +22,22 @@ db = None
 mock_db: Dict[str, dict] = {} # In-memory DB for local mode
 
 # Initialize AI Service
-if GEMINI_API_KEY:
-    print("Using Local Mode with Gemini API Key")
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-pro')
-else:
-    print("Attempting Cloud Mode with Vertex AI")
-    try:
-        vertexai.init(project=PROJECT_ID, location=LOCATION)
-        model = GenerativeModel("gemini-1.5-pro-001")
-    except Exception as e:
-        print(f"Warning: Vertex AI init failed: {e}")
+model = None
+try:
+    print("Attempting Cloud Mode with Vertex AI...")
+    vertexai.init(project=PROJECT_ID, location=LOCATION)
+    model = GenerativeModel("gemini-1.5-pro-001")
+    print("Success: Connected to Vertex AI.")
+except Exception as e:
+    print(f"Vertex AI init failed: {e}")
+    
+    if GEMINI_API_KEY:
+        print("Falling back to Local Mode with Gemini API Key...")
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-1.5-pro')
+        print("Success: Connected to Gemini API.")
+    else:
+        print("Warning: No AI Service configured (Vertex failed & No API Key).")
 
 # Initialize Database Service
 try:
