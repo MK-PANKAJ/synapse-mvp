@@ -70,9 +70,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }),
       );
       
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        
+
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
