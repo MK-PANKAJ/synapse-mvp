@@ -1,5 +1,7 @@
 import os
 import mimetypes
+import time
+import random
 import vertexai
 from vertexai.generative_models import GenerativeModel, Part, GenerationConfig
 from google.cloud import firestore, storage
@@ -26,7 +28,8 @@ print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
 try:
     # 1. Vertex AI
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    model = GenerativeModel("gemini-2.5-flash")
+    # Using 1.5-flash for better quota stability (2.5-flash hit 429 limits)
+    model = GenerativeModel("gemini-1.5-flash")
     print("SUCCESS: Vertex AI Initialized.")
 
     # 2. Firestore
@@ -143,11 +146,24 @@ class CognitiveService:
                 # TEXT MODE (Transcript Only)
                 inputs.append(f"\n\nTRANSCRIPT:\n{transcript[:25000]}...") # Increased limit for text
 
-            response = model.generate_content(
-                inputs,
-                generation_config=GenerationConfig(response_mime_type="application/json")
-            )
-            return response.text
+            # RETRY LOGIC FOR QUOTA LIMITS (429)
+            max_retries = 3
+            base_delay = 2
+            
+            for attempt in range(max_retries):
+                try:
+                    response = model.generate_content(
+                        inputs,
+                        generation_config=GenerationConfig(response_mime_type="application/json")
+                    )
+                    return response.text
+                except Exception as e:
+                    if "429" in str(e) and attempt < max_retries - 1:
+                        sleep_time = base_delay * (2 ** attempt) + random.uniform(0, 1)
+                        print(f"Quota Hit (429). Retrying in {sleep_time:.2f}s...")
+                        time.sleep(sleep_time)
+                    else:
+                        raise e
         except Exception as e:
             print(f"Vertex Generation Error: {e}")
             return f"{{\"summary\": \"AI Error: {str(e)}\", \"focus_points\": []}}"
