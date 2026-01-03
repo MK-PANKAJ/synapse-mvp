@@ -45,7 +45,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   final String userID = "student_01"; 
   // NOTE: Replace with 10.0.2.2 for Emulator or Cloud Run URL for Production
-  final String backendUrl = "https://synapse-mvp.onrender.com"; 
+  final String backendUrl = "https://synapse-backend-232524391998.us-central1.run.app"; 
 
   Future<void> _processVideo() async {
     if (_urlController.text.isEmpty) return;
