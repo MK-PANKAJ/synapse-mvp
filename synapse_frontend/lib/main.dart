@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'podcast_tab.dart';
 
 void main() {
@@ -299,13 +300,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                             ? Center(child: Text("No visual diagram available for this content."))
                                             : Container(
                                                 padding: EdgeInsets.all(16),
-                                                color: Colors.grey.shade50,
+                                                color: Colors.white,
                                                 child: Column(children: [
-                                                    Text("Mermaid.js Diagram Code", style: TextStyle(fontWeight: FontWeight.bold)),
+                                                    // 1. RENDERED DIAGRAM (via mermaid.ink)
+                                                    Expanded(
+                                                        child: Center(
+                                                            child: Image.network(
+                                                                "https://mermaid.ink/img/${base64Encode(utf8.encode(_mermaidCode))}",
+                                                                loadingBuilder: (ctx, child, loadingProgress) {
+                                                                    if (loadingProgress == null) return child;
+                                                                    return CircularProgressIndicator();
+                                                                },
+                                                                errorBuilder: (ctx, error, stackTrace) => 
+                                                                    SingleChildScrollView(child: SelectableText(_mermaidCode)), // Fallback to code
+                                                            )
+                                                        )
+                                                    ),
                                                     SizedBox(height: 10),
-                                                    Expanded(child: SingleChildScrollView(child: SelectableText(_mermaidCode))),
-                                                    SizedBox(height: 10),
-                                                    Text("Copy & Paste into Mermaid Live Editor", style: TextStyle(color: Colors.grey, fontSize: 12))
+                                                    
+                                                    // 2. ACTION BUTTONS
+                                                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                                        ElevatedButton.icon(
+                                                            icon: Icon(Icons.edit),
+                                                            label: Text("Edit in Live Editor"),
+                                                            onPressed: _launchMermaidEditor,
+                                                        ),
+                                                        SizedBox(width: 10),
+                                                        TextButton(
+                                                            child: Text("View Source Code"),
+                                                            onPressed: () {
+                                                                showDialog(context: context, builder: (ctx) => AlertDialog(
+                                                                    content: SingleChildScrollView(child: SelectableText(_mermaidCode))
+                                                                ));
+                                                            } 
+                                                        )
+                                                    ])
                                                 ])
                                             ),
                                             
