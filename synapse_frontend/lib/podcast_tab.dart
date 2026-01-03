@@ -31,14 +31,37 @@ class _PodcastTabState extends State<PodcastTab> {
       setState(() => isPlaying = false);
     } else {
       setState(() => isPlaying = true);
-      // Use Hindi (India) locale for proper Hinglish pronunciation
-      await flutterTts.setLanguage("hi-IN"); 
-      await flutterTts.setPitch(1.0);
-      await flutterTts.speak(widget.content);
+      await flutterTts.setLanguage("hi-IN"); // Base locale for Hinglish
       
-      flutterTts.setCompletionHandler(() {
-        if (mounted) setState(() => isPlaying = false);
-      });
+      // Split content into dialogue lines
+      List<String> lines = widget.content.split('\n');
+      
+      for (String line in lines) {
+        if (!mounted || !isPlaying) break;
+        if (line.trim().isEmpty) continue;
+
+        // VOICE MODULATION LOGIC
+        if (line.contains("**Max**") || line.contains("Max:")) {
+            // Student: Energetic, slightly higher pitch, faster
+            await flutterTts.setPitch(1.2);
+            await flutterTts.setSpeechRate(0.6);
+        } else if (line.contains("**Dr. V**") || line.contains("Dr. V:")) {
+             // Professor: Calm, lower pitch, slower
+            await flutterTts.setPitch(0.8);
+            await flutterTts.setSpeechRate(0.4);
+        } else {
+            // Narrator / Default
+            await flutterTts.setPitch(1.0);
+            await flutterTts.setSpeechRate(0.5);
+        }
+        
+        // Speak the clean text (remove bold markers if you want, but TTS usually ignores them)
+        // Await completion of this line before starting the next
+        await flutterTts.awaitSpeakCompletion(true);
+        await flutterTts.speak(line);
+      }
+      
+      if (mounted) setState(() => isPlaying = false);
     }
   }
 
