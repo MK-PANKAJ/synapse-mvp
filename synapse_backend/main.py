@@ -216,18 +216,30 @@ async def ingest_lecture(payload: VideoIngest):
         video_id = payload.video_url.split("v=")[1].split("&")[0] if "v=" in payload.video_url else "mock_vid"
         
         try:
-            transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-            full_text = " ".join([t['text'] for t in transcript_list])
+            # 1. Try to find ANY transcript (Manual OR Auto-generated)
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Prefer English, but take anything we can find
+            try:
+                transcript = transcript_list.find_transcript(['en', 'en-US', 'en-GB'])
+            except:
+                # If no English, just take the first one available (e.g. Hindi, Spanish)
+                transcript = next(iter(transcript_list))
+                
+            full_text = " ".join([t['text'] for t in transcript.fetch()])
             ai_response = CognitiveService.generate_content(full_text, payload.user_profile)
+            
         except Exception as e:
-            print(f"Transcript Failed ({e}). Attempting Audio Fallback...")
-            # FALLBACK: Download Audio -> GCS -> Gemini
+            print(f"Transcript Fetch Failed ({e}). Attempting Audio Download...")
+            
+            # 2. FALLBACK: Server-Side Audio Download (yt-dlp)
             try:
                 ydl_opts = {
                     'format': 'bestaudio/best',
                     'outtmpl': f'/tmp/{video_id}.%(ext)s',
                     'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3',}],
-                    'quiet': True
+                    'quiet': True,
+                    'socket_timeout': 10 # Fail fast if blocked
                 }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([payload.video_url])
@@ -243,7 +255,11 @@ async def ingest_lecture(payload: VideoIngest):
                 
             except Exception as dl_error: 
                 print(f"Audio Fallback Failed: {dl_error}")
-                raise HTTPException(status_code=400, detail="Could not retrieve transcript AND Audio Download failed. Video is likely private or age-restricted.")
+                # 3. FINAL FALLBACK: Ask User to Upload
+                raise HTTPException(
+                    status_code=400, 
+                    detail="Synapse could not access this video (YouTube might be blocking Cloud Servers). SOLUTION: Please download this video manually and use the 'Upload Video' button!"
+                )
 
     DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
     
