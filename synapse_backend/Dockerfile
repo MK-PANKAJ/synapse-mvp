@@ -11,5 +11,5 @@ COPY . .
 # Expose the port (good practice for Cloud Run)
 EXPOSE 8080
 
-# Use list syntax to ensure variables are passed correctly via shell or direct execution
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]
+# Use standard shell form which allows $PORT expansion by default
+CMD uvicorn main:app --host 0.0.0.0 --port $PORT
