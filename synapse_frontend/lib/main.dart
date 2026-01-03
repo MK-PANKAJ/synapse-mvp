@@ -188,6 +188,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  }
+
+  void _launchMermaidEditor() async {
+      if (_mermaidCode.isEmpty) return;
+      
+      final jsonState = jsonEncode({
+        "code": _mermaidCode,
+        "mermaid": {"theme": "default"}
+      });
+      final base64State = base64Encode(utf8.encode(jsonState));
+      final url = Uri.parse("https://mermaid.live/edit#pako:$base64State"); 
+      // Simple fallback if pako fails:
+      final simpleUrl = Uri.parse("https://mermaid.live/edit#$base64State");
+      
+      try {
+        if (!await launchUrl(simpleUrl)) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Could not launch Mermaid Editor")));
+        }
+      } catch (e) {
+         print("Launch Error: $e");
+         // Fallback for some web blockers
+         html.window.open(simpleUrl.toString(), 'new tab');
+      }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
