@@ -73,29 +73,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        // PARSING LOGIC FIX:
-        // The backend returns a JSON object where "summary_data" is a STRING containing JSON.
-        String rawSummaryJson = data['summary_data'];
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
         
-        // Clean markdown code blocks if present (common LLM behavior)
+        // Defensive: safely get summary_data
+        String rawSummaryJson = (data['summary_data'] ?? "").toString();
+        
+        // Clean markdown
         rawSummaryJson = rawSummaryJson.replaceAll("```json", "").replaceAll("```", "").trim();
         
-        // Decode the inner JSON
+        // Decode inner JSON
         Map<String, dynamic> aiContent = {};
         try {
-            aiContent = jsonDecode(rawSummaryJson);
+            if (rawSummaryJson.startsWith("{")) {
+                aiContent = jsonDecode(rawSummaryJson);
+            } else {
+                aiContent = {"summary": rawSummaryJson};
+            }
         } catch (e) {
             print("Inner JSON Parse Error: $e");
-            // Fallback if parsing fails (show raw text)
             aiContent = {"summary": rawSummaryJson};
         }
 
         setState(() {
-          _currentSummary = aiContent['summary'] ?? "No summary available.";
-          _focusPoints = List<String>.from(aiContent['focus_points'] ?? []);
-          _mermaidCode = aiContent['mermaid_diagram'] ?? "";
-          _currentVideoId = data['lecture_id']; // Keep this line
-          _transcriptContext = data['transcript_context'] ?? "";
+          _currentSummary = aiContent['summary']?.toString() ?? "No summary available.";
+          
+          // Safe List Conversion
+          var rawFocus = aiContent['focus_points'];
+          if (rawFocus is List) {
+             _focusPoints = rawFocus.map((e) => e.toString()).toList();
+          } else {
+             _focusPoints = [];
+          }
+
+          _mermaidCode = aiContent['mermaid_diagram']?.toString() ?? "";
+          _currentVideoId = data['lecture_id']?.toString() ?? "";
+          _transcriptContext = data['transcript_context']?.toString() ?? "";
           _currentPodcastScript = ""; 
         });
       } else {
