@@ -47,7 +47,17 @@ except Exception as e:
     print(f"Warning: Firestore init failed: {e}. Switching to Mock DB (Local Mode).")
     db = None
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Synapse API", version="1.0-Local")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- DATA MODELS ---
 class VideoIngest(BaseModel):
