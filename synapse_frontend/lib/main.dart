@@ -616,7 +616,17 @@ class _DoubtSheetState extends State<DoubtSheet> {
                   color: Colors.grey[100],
                   borderRadius: BorderRadius.circular(12)
               ),
-              child: SingleChildScrollView(child: Text(_answer, style: TextStyle(fontSize: 16))),
+              child: SingleChildScrollView(
+                child: MarkdownBody(
+                  data: _answer,
+                  extensionSet: md.ExtensionSet(
+                    md.ExtensionSet.gitHubFlavored.blockSyntaxes,
+                    [md.InlineHtmlSyntax(), LatexSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes],
+                  ),
+                  builders: {'latex': LatexElementBuilder()},
+                  styleSheet: MarkdownStyleSheet(p: TextStyle(fontSize: 16)),
+                )
+              ),
             ),
           ),
           SizedBox(height: 16),
