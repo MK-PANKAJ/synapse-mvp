@@ -333,13 +333,36 @@ async def ingest_lecture(payload: VideoIngest):
                     detail="Synapse could not access this video (YouTube might be blocking Cloud Servers). SOLUTION: Please download this video manually and use the 'Upload Video' button!"
                 )
 
+
     DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
+    
+    # GENERATE PODCAST SCRIPT ALONGSIDE SUMMARY
+    podcast_script = ""
+    try:
+        # Use full_text for podcast if available, otherwise use AI summary
+        podcast_source = full_text if full_text and not full_text.startswith("Video Content") and not full_text.startswith("Audio Content") else ""
+        if podcast_source:
+            podcast_script = CognitiveService.generate_podcast_script(podcast_source[:15000], payload.user_profile)
+        else:
+            # Fallback: extract summary from ai_response and use that
+            import json
+            try:
+                summary_data = json.loads(ai_response)
+                summary_text = summary_data.get('summary', '')
+                if summary_text:
+                    podcast_script = CognitiveService.generate_podcast_script(summary_text, payload.user_profile)
+            except:
+                pass
+    except Exception as e:
+        print(f"Podcast generation failed: {e}")
+        podcast_script = "Podcast generation failed. Please try again later."
     
     return {
         "status": "success", 
         "lecture_id": video_id, 
         "content": ai_response,
-        "transcript_context": full_text[:5000]
+        "transcript_context": full_text[:5000],
+        "podcast_script": podcast_script
     }
 
 @app.post("/api/v1/generate-podcast")

@@ -136,6 +136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _focusPoints = [];
              }
              _currentMermaidCode = aiContent['mermaid_diagram']?.toString() ?? "";
+             _currentPodcastScript = data['podcast_script']?.toString() ?? "";
              _isLoading = false;
              _tabController?.animateTo(0);
          });
