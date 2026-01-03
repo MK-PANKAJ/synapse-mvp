@@ -135,7 +135,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                      aiContent['mermaid_diagram'] = _mermaidCode;
                  }
             } catch (_) {}
-            
+        }
+
              setState(() {
                  _currentVideoId = data['lecture_id']?.toString() ?? "";
                  _transcriptContext = data['transcript_context']?.toString() ?? "";
@@ -156,6 +157,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
              });
         }
     }
+
+  Future<void> _pickAndUploadVideo() async {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.video);
+      
+      if (result != null) {
+          setState(() => _isLoading = true);
+          PlatformFile file = result.files.first;
+          
+          // WEB vs MOBILE: usage differs, but for MVP web we use bytes
+          // Note: For large files in prod, we'd use signed URLs. usage here is simple multipart.
+          var request = http.MultipartRequest("POST", Uri.parse('$backendUrl/api/v1/upload'));
+          
+          if (file.bytes != null) {
+              // WEB
+              request.files.add(http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name));
+          } else {
+             // MOBILE (not active, but safe fallback)
+             print("File path missing (common on web without bytes)");
+             setState(() { _isLoading = false; _currentSummary = "Error: File selection failed."; });
+             return;
+          }
+
+          try {
+              var streamedResponse = await request.send();
+              var response = await http.Response.fromStream(streamedResponse);
+              
+              if (response.statusCode == 200) {
+                  var data = jsonDecode(response.body);
+                  String videoUri = data['video_uri'];
+                  
+                  // Now Ingest
+                  _urlController.text = videoUri; // Show URI to user
+                  await _processVideo(); // Reuse ingest logic
+              } else {
+                   setState(() => _currentSummary = "Upload Failed: ${response.body}");
+              }
+          } catch (e) {
+              setState(() => _currentSummary = "Upload Error: $e");
+          }
+           setState(() => _isLoading = false);
+      }
+  }
 
   Future<void> _generatePodcast() async {
     String contextSource = _transcriptContext;
