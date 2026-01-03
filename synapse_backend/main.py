@@ -63,7 +63,8 @@ TASK: Analyze the transcript and extract structured learning data.
 OUTPUT JSON FORMAT:
 {{
     "summary": "...markdown content...",
-    "focus_points": ["⚡ Point 1", "🧠 Point 2", ...]
+    "focus_points": ["⚡ Point 1", "🧠 Point 2", ...],
+    "mermaid_diagram": "graph TD; A[Concept] --> B[Result]; ..." (Optional, send blank string if not applicable)
 }}
 """
 
@@ -105,7 +106,9 @@ class CognitiveService:
         if "ADHD" in profile:
             return "Format: High-energy, emoji-bullet points. Short sentences."
         if "Dyslexia" in profile:
-            return "Format: Simple syntax. Use visual metaphors. No walls of text."
+            return "Format: Simple syntax. Visual metaphors. No walls of text."
+        if "Visual" in profile:
+            return "Format: Highly visual. Create a Mermaid.js flowchart describing the process."
         return "Format: Clear, academic summary."
 
     @staticmethod

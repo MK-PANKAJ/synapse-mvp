@@ -40,6 +40,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _currentPodcastScript = "";
   String _currentVideoId = "";
   String _transcriptContext = "";
+  String _mermaidCode = "";
+  String _selectedProfile = "ADHD"; // Default
+  final List<String> _profiles = ["ADHD", "Dyslexia", "Visual", "Hinglish"];
   
   bool _isLoading = false;
   bool _isPodcastLoading = false;
@@ -59,7 +62,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         body: jsonEncode({
           "user_id": userID,
           "video_url": _urlController.text,
-          "user_profile": "ADHD" 
+          "user_profile": _selectedProfile
         }),
       );
       
@@ -78,6 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final parsedContent = jsonDecode(cleanJson);
             summary = parsedContent['summary'];
             focus = parsedContent['focus_points'] ?? [];
+            _mermaidCode = parsedContent['mermaid_diagram'] ?? "";
         } catch (e) {
             print("JSON Parse Error (keeping raw text): $e");
         }
@@ -178,7 +182,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Synapse Dashboard")),
+      appBar: AppBar(
+        title: Text("Synapse Dashboard"),
+        actions: [
+            DropdownButton<String>(
+                value: _selectedProfile,
+                dropdownColor: Colors.white,
+                underline: Container(),
+                icon: Icon(Icons.psychology, color: Colors.indigo),
+                onChanged: (val) => setState(() => _selectedProfile = val!),
+                items: _profiles.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList()
+            ),
+            SizedBox(width: 16)
+        ],
+      ),
       body: Padding(
         padding: EdgeInsets.all(16.0),
         child: Column(
@@ -223,7 +240,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (!_isLoading && _currentSummary.isNotEmpty)
                 Expanded(
                     child: DefaultTabController(
-                        length: 3,
+                        length: 4,
                         child: Column(
                             children: [
                                 TabBar(
@@ -231,6 +248,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     tabs: [
                                         Tab(icon: Icon(Icons.article), text: "Summary"),
                                         Tab(icon: Icon(Icons.bolt), text: "Focus"),
+                                        Tab(icon: Icon(Icons.hub), text: "Visual"),
                                         Tab(icon: Icon(Icons.headphones), text: "Podcast"),
                                     ]
                                 ),
@@ -266,6 +284,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                         ),
                                                     );
                                                 }
+                                                }
+                                            ),
+
+                                            // VISUAL TAB
+                                            _mermaidCode.isEmpty
+                                            ? Center(child: Text("No visual diagram available for this content."))
+                                            : Container(
+                                                padding: EdgeInsets.all(16),
+                                                color: Colors.grey.shade50,
+                                                child: Column(children: [
+                                                    Text("Mermaid.js Diagram Code", style: TextStyle(fontWeight: FontWeight.bold)),
+                                                    SizedBox(height: 10),
+                                                    Expanded(child: SingleChildScrollView(child: SelectableText(_mermaidCode))),
+                                                    SizedBox(height: 10),
+                                                    Text("Copy & Paste into Mermaid Live Editor", style: TextStyle(color: Colors.grey, fontSize: 12))
+                                                ])
                                             ),
                                             
                                             // PODCAST TAB
