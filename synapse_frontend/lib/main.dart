@@ -126,90 +126,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
                      // SANITIZER: 
                      // 1. Remove HTML tags
                      // 2. Fix Smart Quotes (” -> ") which break the renderer
+                     // 3. Fix literal newlines (\n -> actual newline)
                      _mermaidCode = rawMermaid
                         .replaceAll(RegExp(r'<[^>]*>', multiLine: true, caseSensitive: false), "")
                         .replaceAll('”', '"')
-                        .replaceAll('“', '"');
+                        .replaceAll('“', '"')
+                        .replaceAll(r'\n', '\n'); 
                      aiContent['mermaid_diagram'] = _mermaidCode;
                  }
             } catch (_) {}
+            
+             setState(() {
+                 _currentVideoId = data['lecture_id']?.toString() ?? "";
+                 _transcriptContext = data['transcript_context']?.toString() ?? "";
+                 _currentSummary = aiContent['summary']?.toString() ?? "No summary available.";
+                 
+                 // Safe List Conversion
+                 var rawFocus = aiContent['focus_points'];
+                 if (rawFocus is List) {
+                    _focusPoints = rawFocus.map((e) => e.toString()).toList();
+                 } else {
+                    _focusPoints = [];
+                 }
+                 _currentMermaidCode = aiContent['mermaid_diagram']?.toString() ?? "";
+                 _isLoading = false;
+                 
+                 // Show Summary Tab automatically
+                 _tabController?.animateTo(0);
+             });
         }
-
-        setState(() {
-          _currentSummary = aiContent['summary']?.toString() ?? "No summary available.";
-          
-          // Safe List Conversion
-          var rawFocus = aiContent['focus_points'];
-          if (rawFocus is List) {
-             _focusPoints = rawFocus.map((e) => e.toString()).toList();
-          } else {
-             _focusPoints = [];
-          }
-
-          _mermaidCode = aiContent['mermaid_diagram']?.toString() ?? "";
-          _currentVideoId = data['lecture_id']?.toString() ?? "";
-          _transcriptContext = data['transcript_context']?.toString() ?? "";
-          _currentPodcastScript = ""; 
-        });
-      } else {
-        setState(() => _currentSummary = "Server Error (${response.statusCode}): ${response.body}");
-      }
-    } catch (e) {
-      // If error is empty or timeout, show explicit message
-      String errorMsg = e.toString();
-      if (errorMsg.contains("Timeout")) {
-          errorMsg = "Request timed out. The video might be too long or the server is busy.";
-      }
-      setState(() => _currentSummary = "Connection/Processing Error: $errorMsg");
     }
-    setState(() => _isLoading = false);
-  }
-
-  Future<void> _pickAndUploadVideo() async {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.video);
-      
-      if (result != null) {
-          setState(() => _isLoading = true);
-          PlatformFile file = result.files.first;
-          
-          // WEB vs MOBILE: usage differs, but for MVP web we use bytes
-          // Note: For large files in prod, we'd use signed URLs. usage here is simple multipart.
-          var request = http.MultipartRequest("POST", Uri.parse('$backendUrl/api/v1/upload'));
-          
-          if (file.bytes != null) {
-              // WEB
-              request.files.add(http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name));
-          } else {
-             // MOBILE (not active, but safe fallback)
-             print("File path missing (common on web without bytes)");
-             setState(() { _isLoading = false; _currentSummary = "Error: File selection failed."; });
-             return;
-          }
-
-          try {
-              var streamedResponse = await request.send();
-              var response = await http.Response.fromStream(streamedResponse);
-              
-              if (response.statusCode == 200) {
-                  var data = jsonDecode(response.body);
-                  String videoUri = data['video_uri'];
-                  
-                  // Now Ingest
-                  _urlController.text = videoUri; // Show URI to user
-                  await _processVideo(); // Reuse ingest logic
-              } else {
-                   setState(() => _currentSummary = "Upload Failed: ${response.body}");
-              }
-          } catch (e) {
-              setState(() => _currentSummary = "Upload Error: $e");
-          }
-           setState(() => _isLoading = false);
-      }
-  }
 
   Future<void> _generatePodcast() async {
-    if (_transcriptContext.isEmpty) {
-      // If no transcript, try to use summary or show error
+    String contextSource = _transcriptContext;
+    
+    // SMART CONTEXT SWITCHING:
+    // If the backend used "Audio Fallback" (no transcript text available), the context is just a placeholder.
+    // In that case, use the AI-generated SUMMARY as the source truth for the podcast.
+    if (contextSource.isEmpty || contextSource.contains("Audio Content (Processed via Multimodal AI)")) {
+        if (_currentSummary.isEmpty || _currentSummary == "Loading...") {
+             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No valid content to generate podcast from!")));
+             return;
+        }
+        contextSource = "SUMMARY OF CONTENT:\n$_currentSummary";
+    }
+  
+    if (contextSource.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No content to generate podcast from! Process a video first.")));
       return;
   }
@@ -220,7 +182,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Uri.parse('$backendUrl/api/v1/generate-podcast'),
             headers: {"Content-Type": "application/json"},
             body: jsonEncode({
-                "transcript_text": _transcriptContext,
+                "transcript_text": contextSource,
                 "user_profile": _selectedProfile
             })
         );
