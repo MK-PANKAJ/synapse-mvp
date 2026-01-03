@@ -89,7 +89,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }
         } catch (e) {
             print("Inner JSON Parse Error: $e");
-            aiContent = {"summary": rawSummaryJson};
+            
+            // REGEX FALLBACK: Manually extract fields if JSON is slightly broken
+            String summaryVal = "";
+            try {
+                // Extract summary: "summary": "(...)"
+                final sumMatch = RegExp(r'"summary":\s*"(.*?)(?<!\\)"', dotAll: true).firstMatch(rawSummaryJson);
+                if (sumMatch != null) summaryVal = sumMatch.group(1) ?? "";
+            } catch (_) {}
+            
+            if (summaryVal.isNotEmpty) {
+                 // Unescape basic JSON characters for readable text
+                 summaryVal = summaryVal.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"');
+                 aiContent['summary'] = summaryVal;
+            } else {
+                 aiContent['summary'] = rawSummaryJson; // Ultimate fallback
+            }
+            
+            // Extract Focus Points
+             try {
+                final focusMatch = RegExp(r'"focus_points":\s*\[(.*?)\]', dotAll: true).firstMatch(rawSummaryJson);
+                if (focusMatch != null) {
+                    final rawList = focusMatch.group(1)!;
+                    // Split by comma+quote to roughly get items
+                    final items = rawList.split(RegExp(r'",\s*"'));
+                    aiContent['focus_points'] = items.map((s) => s.replaceAll('"', '').trim()).toList();
+                }
+            } catch (_) {}
+
+            // Extract Mermaid
+            try {
+                 final merMatch = RegExp(r'"mermaid_diagram":\s*"(.*?)(?<!\\)"', dotAll: true).firstMatch(rawSummaryJson);
+                 if (merMatch != null) {
+                     aiContent['mermaid_diagram'] = merMatch.group(1)?.replaceAll(r'\\n', '\n').replaceAll(r'\"', '"') ?? "";
+                 }
+            } catch (_) {}
         }
 
         setState(() {
