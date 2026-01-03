@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'podcast_tab.dart';
 
 void main() {
   runApp(SynapseApp());

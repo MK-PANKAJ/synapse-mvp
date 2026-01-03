@@ -26,10 +26,13 @@ model = None
 try:
     print("Attempting Cloud Mode with Vertex AI...")
     vertexai.init(project=PROJECT_ID, location=LOCATION)
-    model = GenerativeModel("gemini-1.5-pro-001")
+    temp_model = GenerativeModel("gemini-1.5-pro-001")
+    # CRITICAL: Verify auth works, otherwise fallback
+    temp_model.generate_content("test") 
+    model = temp_model
     print("Success: Connected to Vertex AI.")
 except Exception as e:
-    print(f"Vertex AI init failed: {e}")
+    print(f"Vertex AI init/auth failed: {e}")
     
     if GEMINI_API_KEY:
         print("Falling back to Local Mode with Gemini API Key...")
@@ -77,11 +80,15 @@ class PodcastRequest(BaseModel):
 class CognitiveService:
     @staticmethod
     def get_prompt_logic(profile: str):
+        base_instruction = "Make it extremely simple (ELIF5). Use analogies."
+        if "Hinglish" in profile or "Hindi" in profile:
+            base_instruction += " Explain in mixed Hindi-English (Hinglish) for an Indian student."
+        
         if "ADHD" in profile:
-            return "Format: High-energy, emoji-bullet points. Max 3 bullets."
+            return base_instruction + " Format: High-energy, emoji-bullet points. Max 3 bullets."
         if "Dyslexia" in profile:
-            return "Format: Simple syntax. Use visual metaphors."
-        return "Format: Clear, academic summary."
+            return base_instruction + " Format: Simple syntax. Use visual metaphors."
+        return base_instruction + " Format: Clear, academic summary."
 
     @staticmethod
     def generate_content(transcript: str, profile: str):
@@ -115,7 +122,23 @@ class CognitiveService:
         if not model:
             return "Error: AI not connected."
             
-        prompt = "Convert this transcript into a podcast script between Dr. V and Max:\n" + transcript[:10000]
+        prompt = """
+        You are 'Synapse FM', a study podcast.
+        Convert the transcript into a fun, Hinglish (Hindi+English) conversation between:
+        1. **Dr. V** (Serious expert, speaks mostly English).
+        2. **Max** (Curious student, speaks funny Hinglish slang like 'Arre sir', 'Matlab kya?').
+
+        Rules:
+        - Keep it short (approx 2 minutes reading time).
+        - Max checks understanding often.
+        - IMPORTANT: Do NOT include [Sound Effects]. Just the dialogue.
+        - Format: 
+        Dr. V: ...
+        Max: ...
+        
+        TRANSCRIPT:
+        """ + transcript[:10000]
+        
         try:
             response = model.generate_content(prompt)
             return response.text
