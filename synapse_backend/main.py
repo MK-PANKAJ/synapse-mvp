@@ -110,6 +110,7 @@ class DoubtQuery(BaseModel):
 
 class PodcastRequest(BaseModel):
     transcript_text: str
+    user_profile: str = "General"
 
 # --- SERVICE LAYER ---
 class CognitiveService:
@@ -176,11 +177,55 @@ class CognitiveService:
             return f"{{\"summary\": \"AI Error: {str(e)}\", \"focus_points\": []}}"
 
     @staticmethod
-    def generate_podcast_script(transcript: str):
+    def generate_podcast_script(transcript: str, profile: str):
         if not model:
             raise HTTPException(status_code=500, detail="Vertex AI is not connected.")
             
-        prompt = PODCAST_PROMPT_TEMPLATE + f"\n\nTRANSCRIPT:\n{transcript[:10000]}"
+        # DYNAMIC PODCAST PERSONAS
+        persona_setup = ""
+        if "Hinglish" in profile:
+             persona_setup = """
+             **STYLE:** Viral Indian Study Podcast. Fun, informal, "Hinglish" (Hindi+English).
+             **HOSTS:**
+             - **Max:** Indian Gen-Z student. Uses slang ("Arre sir", "Matlab?", "Bhai"). Energetic.
+             - **Dr. V:** Patient professor. Explains consistently but simply.
+             """
+        elif "ADHD" in profile:
+             persona_setup = """
+             **STYLE:** High-Dopamine, Fast-Paced. NO boring lectures.
+             **HOSTS:**
+             - **Max:** Hyper-curious student. Interrupts often. Needs constant examples.
+             - **Dr. V:** Expert who uses wild analogies (e.g., "Imagine the cell is a pizza factory").
+             """
+        elif "Dyslexia" in profile:
+             persona_setup = """
+             **STYLE:** Visual Audio. Focus on describing things vividly.
+             **HOSTS:**
+             - **Storyteller:** Uses narrative structure. "Picture this..."
+             - **Guide:** Helps navigate the story.
+             """
+        else: # General / Research
+             persona_setup = """
+             **STYLE:** NPR / BBC Style Interview. Professional, dense, academic.
+             **HOSTS:**
+             - **Host:** Professional journalist.
+             - **Expert:** Deep subject matter expert.
+             """
+
+        prompt = f"""
+        You are a top-tier Educational Podcast Producer.
+        
+        {persona_setup}
+
+        **TASK:** Convert this transcript into a script matching the STYLE and HOSTS above.
+        **RULES:**
+        1. Base purely on the text below.
+        2. Keep it engaging.
+        3. NO Stage directions (like *laughs*). Dialogue ONLY.
+        
+        **TRANSCRIPT:**
+        {transcript[:15000]}
+        """
         
         try:
             response = model.generate_content(prompt)
@@ -298,6 +343,8 @@ async def ingest_lecture(payload: VideoIngest):
 
 @app.post("/api/v1/generate-podcast")
 async def generate_podcast_endpoint(payload: PodcastRequest):
+    script = CognitiveService.generate_podcast_script(payload.transcript_text, payload.user_profile)
+    return {"script": script}
     return {"status": "success", "script": CognitiveService.generate_podcast_script(payload.transcript_text)}
 
 @app.post("/api/v1/ask-doubt")

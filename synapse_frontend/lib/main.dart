@@ -208,14 +208,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _generatePodcast() async {
-    if (_transcriptContext.isEmpty) return;
+    if (_transcriptContext.isEmpty) {
+      // If no transcript, try to use summary or show error
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("No content to generate podcast from! Process a video first.")));
+      return;
+  }
     
     setState(() => _isPodcastLoading = true);
     try {
         final response = await http.post(
             Uri.parse('$backendUrl/api/v1/generate-podcast'),
             headers: {"Content-Type": "application/json"},
-            body: jsonEncode({"transcript_text": _transcriptContext})
+            body: jsonEncode({
+                "transcript_text": _transcriptContext,
+                "user_profile": _selectedProfile
+            })
         );
         
         if (response.statusCode == 200) {
