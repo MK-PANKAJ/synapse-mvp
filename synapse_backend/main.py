@@ -7,7 +7,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi
 from typing import List, Optional, Dict
-from python_dotenv import load_dotenv
+from dotenv import load_dotenv
 
 load_dotenv()
 
