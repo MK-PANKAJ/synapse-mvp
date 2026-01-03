@@ -73,8 +73,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         
-        // Defensive: safely get summary_data
-        String rawSummaryJson = (data['summary_data'] ?? "").toString();
+        // Defensive: safely get summary_data OR content (backend uses 'content')
+        String rawSummaryJson = (data['summary_data'] ?? data['content'] ?? "").toString();
         
         // Clean markdown
         rawSummaryJson = rawSummaryJson.replaceAll("```json", "").replaceAll("```", "").trim();
