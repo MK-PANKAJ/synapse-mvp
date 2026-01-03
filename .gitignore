@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Flutter / Dart
+.dart_tool/
+.packages
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+pubspec.lock
+
+# Android studio / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+.gradle/
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Synapse Specific
+synapse_backend/.env

@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+google-cloud-aiplatform
+google-cloud-firestore
+youtube-transcript-api
+pydantic
+python-multipart
+python-dotenv
