@@ -73,12 +73,12 @@ OUTPUT JSON FORMAT:
     "focus_points": ["⚡ Point 1", "🧠 Point 2", ...],
     "mermaid_diagram": "graph TD; A[Concept] --> B[Result]; ..." 
     (REQUIRED. RULES for Mermaid: 
-     1. ALWAYS create a diagram, even if simple. 
-     2. Use 'graph TD'.
-     3. NO HTML tags (like <sub>, <b>). Use plain text.
-     4. ALWAYS use square brackets and quotes for ALL node labels: id["Label Text"]. 
-     5. EXTRICTLY FORBIDDEN: Do NOT use parentheses () for defining nodes. Use [] only.
-     6. Avoid parentheses inside label text. Use 'of' instead (e.g. "Kernel of T" not "Kernel(T)").
+     1. ALWAYS use 'graph TD'.
+     2. ALWAYS use square brackets and quotes for ALL node labels: id["Label Text"]. Ex: A["Kernel of T"], B["Dimension = n"].
+     3. DO NOT use parentheses () for defining nodes. Use [] only.
+     4. Use standard edge labels: A -->|Label| B. Do NOT use text on lines without pipes.
+     5. Math equations MUST be strictly enclosed in quotes: id["A + B = C"]. Do NOT use unquoted math symbols like = or + outside quotes.
+     6. NO HTML tags. Use plain text.
      7. NO special characters in node IDs (use alphanumeric only, e.g. Node1).
      8. Keep labels concise.)
 }}
