@@ -76,10 +76,11 @@ OUTPUT JSON FORMAT:
      1. ALWAYS create a diagram, even if simple. 
      2. Use 'graph TD'.
      3. NO HTML tags (like <sub>, <b>). Use plain text.
-     4. NO parentheses in labels. Use "of" instead (e.g., "Kernel of T" not "Kernel(T)").
-     5. NO special characters in node IDs or labels (no parentheses, brackets, pipes, etc.).
-     6. Use quotes for labels with spaces: id["Label Text"].
-     7. Keep labels concise and readable.)
+     4. ALWAYS use square brackets and quotes for ALL node labels: id["Label Text"]. 
+     5. EXTRICTLY FORBIDDEN: Do NOT use parentheses () for defining nodes. Use [] only.
+     6. Avoid parentheses inside label text. Use 'of' instead (e.g. "Kernel of T" not "Kernel(T)").
+     7. NO special characters in node IDs (use alphanumeric only, e.g. Node1).
+     8. Keep labels concise.)
 }}
 """
 
