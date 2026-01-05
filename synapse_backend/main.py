@@ -315,7 +315,8 @@ async def ingest_lecture(payload: VideoIngest):
                     'outtmpl': f'/tmp/{video_id}.%(ext)s',
                     'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3',}],
                     'quiet': True,
-                    'socket_timeout': 10 # Fail fast if blocked
+                    'socket_timeout': 10,
+                    'extractor_args': {'youtube': {'player_client': ['android', 'web']}} # Attempt to bypass blocking
                 }
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([payload.video_url])
