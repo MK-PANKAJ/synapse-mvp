@@ -73,7 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           "video_url": _urlController.text,
           "user_profile": _selectedProfile
         }),
-      ).timeout(Duration(seconds: 90));
+      ).timeout(Duration(seconds: 300));
       
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
