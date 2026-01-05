@@ -74,9 +74,9 @@ OUTPUT JSON FORMAT:
     "mermaid_diagram": "graph TD; A[Concept] --> B[Result]; ..." 
     (REQUIRED. RULES for Mermaid: 
      1. ALWAYS use 'graph TD'.
-     2. ALWAYS use square brackets and quotes for ALL node labels: id["Label Text"]. Ex: A["Kernel of T"], B["Dimension = n"].
+     2. ALWAYS use square brackets and quotes for ALL node labels: id["Label Text"]. Ex: A["Kernel of T"].
      3. DO NOT use parentheses () for defining nodes. Use [] only.
-     4. Use standard edge labels: A -->|Label| B. Do NOT use text on lines without pipes.
+     4. Use standard edge labels: A -->|Label| B. DO NOT use text strings directly on lines like 'A -- "Text" --> B'.
      5. Math equations MUST be strictly enclosed in quotes: id["A + B = C"]. Do NOT use unquoted math symbols like = or + outside quotes.
      6. NO HTML tags. Use plain text.
      7. NO special characters in node IDs (use alphanumeric only, e.g. Node1).
