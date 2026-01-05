@@ -34,3 +34,5 @@ pubspec.lock
 
 # Synapse Specific
 synapse_backend/.env
+cookies.txt
+synapse_backend/cookies.txt
