@@ -292,8 +292,14 @@ async def ingest_lecture(payload: VideoIngest):
         video_id = payload.video_url.split("v=")[1].split("&")[0] if "v=" in payload.video_url else "mock_vid"
         
         try:
+            # Check for cookies.txt
+            cookie_file = 'cookies.txt' if os.path.exists('cookies.txt') else None
+
             # 1. Try to find ANY transcript (Manual OR Auto-generated)
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            if cookie_file:
+                 transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, cookies=cookie_file)
+            else:
+                 transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
             
             # Prefer English, but take anything we can find
             try:
@@ -316,8 +322,11 @@ async def ingest_lecture(payload: VideoIngest):
                     'postprocessors': [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3',}],
                     'quiet': True,
                     'socket_timeout': 10,
-                    'extractor_args': {'youtube': {'player_client': ['android', 'web']}} # Attempt to bypass blocking
+                    'extractor_args': {'youtube': {'player_client': ['android', 'web']}} 
                 }
+                if os.path.exists('cookies.txt'):
+                    ydl_opts['cookiefile'] = 'cookies.txt'
+
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([payload.video_url])
                 
