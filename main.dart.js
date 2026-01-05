@@ -97193,7 +97193,7 @@ b=A.ef("https://synapse-backend-232524391998.us-central1.run.app/api/v1/ingest",
 a=t.N
 a0=A.ac(["Content-Type","application/json"],a,a)
 s=7
-return A.A(A.aGI(b,B.aX.vI(A.ac(["user_id","student_01","video_url",a5.a.a,"user_profile",n.as],a,a),null),a0).M2(0,A.du(0,0,90)),$async$uC)
+return A.A(A.aGI(b,B.aX.vI(A.ac(["user_id","student_01","video_url",a5.a.a,"user_profile",n.as],a,a),null),a0).M2(0,A.du(0,0,300)),$async$uC)
 case 7:m=a9
 if(m.b===200){a5={}
 b=m
