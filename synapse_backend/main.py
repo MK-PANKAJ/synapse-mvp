@@ -42,16 +42,20 @@ print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
 try:
     # 1. Vertex AI (Cloud Mode)
     if PROJECT_ID:
-        vertexai.init(project=PROJECT_ID, location=LOCATION)
-        model = GenerativeModel("gemini-1.5-flash")
-        print("SUCCESS: Vertex AI Initialized (Cloud Mode).")
+        try:
+             vertexai.init(project=PROJECT_ID, location=LOCATION)
+             model = GenerativeModel("gemini-2.5-flash") # Pinned Version
+             print("SUCCESS: Vertex AI Initialized (Cloud Mode). Model: gemini-2.5-flash")
+        except Exception as v_err:
+             print(f"CRITICAL: Vertex AI Init Failed for project {PROJECT_ID} in {LOCATION}. Error: {v_err}")
+             raise v_err
     
     # 2. Google AI Studio (Local Mode Fallback)
     elif GEMINI_API_KEY:
         import google.generativeai as genai
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        print("SUCCESS: Google AI Studio Initialized (Local Mode).")
+        model = genai.GenerativeModel("gemini-2.5-flash") # Pinned Version
+        print("SUCCESS: Google AI Studio Initialized (Local Mode). Model: gemini-2.5-flash")
     
     else:
         print("CRITICAL WARNING: No GCP Project AND No Gemini API Key found. AI features will fail.")
