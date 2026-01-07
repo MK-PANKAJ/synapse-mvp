@@ -172,7 +172,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
          setState(() {
              _currentVideoId = data['lecture_id']?.toString() ?? "";
              _transcriptContext = data['transcript_context']?.toString() ?? "";
-             _currentSummary = aiContent['summary']?.toString() ?? "No summary available.";
+             
+             String rawSum = aiContent['summary']?.toString() ?? "";
+             if (rawSum.trim().isEmpty) {
+                 rawSum = "Error: server returned empty summary. Raw: ${data.toString()}";
+             }
+             _currentSummary = rawSum;
              
              var rawFocus = aiContent['focus_points'];
              if (rawFocus is List) {
@@ -196,12 +201,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
              _isLoading = false;
              _tabController?.animateTo(0);
              
-             // Init Player
-             if (_currentVideoId.isNotEmpty && _currentVideoId != "mock_vid") {
+             print("DEBUG: Response Data: $data"); // LOG THE RESPONSE
+             
+             // Init Player - ONLY for valid YouTube IDs
+             // Heuristic: YouTube IDs are strict alphanumeric (plus -_) and don't contain spaces or dots (extensions)
+             bool isLikelyYoutube = !_currentVideoId.contains(" ") && !_currentVideoId.contains(".");
+             print("DEBUG: VideoID='$_currentVideoId', isLikelyYoutube=$isLikelyYoutube");
+
+             if (_currentVideoId.isNotEmpty && _currentVideoId != "mock_vid" && isLikelyYoutube) {
                  _ytController = YoutubePlayerController(
                     initialVideoId: _currentVideoId,
                     flags: YoutubePlayerFlags(autoPlay: false, mute: false),
                  );
+             } else {
+                 _ytController = null;
              }
          });
       } else {
