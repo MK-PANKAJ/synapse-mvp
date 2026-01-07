@@ -27,6 +27,13 @@ gcloud run deploy synapse-backend \
     --region us-central1 \
     --allow-unauthenticated
 
-echo "============================================="
-echo "   Deployment Complete!"
-echo "============================================="
+if [ $? -eq 0 ]; then
+    echo "============================================="
+    echo "   Deployment Complete!"
+    echo "============================================="
+else
+    echo "============================================="
+    echo "   Deployment FAILED"
+    echo "============================================="
+    exit 1
+fi
