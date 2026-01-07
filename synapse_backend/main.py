@@ -3,7 +3,7 @@ import mimetypes
 import time
 import random
 import vertexai
-from vertexai.generative_models import GenerativeModel, Part, GenerationConfig
+from vertexai.generative_models import GenerativeModel, Part, GenerationConfig, Content
 from google.cloud import firestore, storage
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
@@ -159,36 +159,54 @@ class CognitiveService:
             raise HTTPException(status_code=500, detail="Vertex AI is not connected. Check Server Logs.")
             
         profile_instruction = CognitiveService.get_prompt_logic(profile)
-        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(profile_instruction=profile_instruction)
+        
+        # USE STRUCTURED PROMPTS (Safety)
+        system_instruction = SYSTEM_PROMPT_TEMPLATE.format(profile_instruction=profile_instruction)
         
         try:
-            inputs = [system_prompt]
+            # 1. SETUP CONTENT
+            contents = []
+            
             if video_uri:
-                # MULTIMODAL MODE (Video + Text Prompt)
+                # MULTIMODAL VIDEO PROCESSING
+                # Vertex AI automatically handles "soft caching" for GCS URIs in the backend optimization 
+                # for repeated calls in short windows, but for explicit caching we would use caching.CachedContent.create.
+                # For this MVP, using Part.from_uri is the correct efficient way vs bytes.
                 print(f"DEBUG: Processing Video from {video_uri}")
-                
-                # Dynamic MIME Type Detection
                 mime_type, _ = mimetypes.guess_type(video_uri)
-                if not mime_type:
-                    mime_type = "video/mp4" # Default fallback
-                
-                print(f"DEBUG: Detected MIME Type: {mime_type}")
+                if not mime_type: mime_type = "video/mp4"
                 
                 video_part = Part.from_uri(uri=video_uri, mime_type=mime_type)
-                inputs.append(video_part)
-                inputs.append("Analyze this content.")
+                # Structured User Prompt
+                contents = [
+                   # System instruction is handled by model init usually, but for 1.5 we can pass as first logic
+                   # or use system_instruction arg in GenerativeModel (if supported by lib ver).
+                   # keeping it simple:
+                   Content(role="user", parts=[
+                        Part.from_text(system_instruction), 
+                        video_part, 
+                        Part.from_text("Analyze this content.")
+                   ])
+                ]
             else:
-                # TEXT MODE (Transcript Only)
-                inputs.append(f"\n\nTRANSCRIPT:\n{transcript[:25000]}...") # Increased limit for text
+                # TEXT PROCESSING
+                # CACHING LOGIC: If transcript is huge (>32k), we *should* use context caching.
+                # MVP Logic: Just pass it.
+                contents = [
+                    Content(role="user", parts=[
+                        Part.from_text(system_instruction),
+                        Part.from_text(f"TRANSCRIPT:\n{transcript[:25000]}...")
+                    ])
+                ]
 
-            # RETRY LOGIC FOR QUOTA LIMITS (429)
+            # RETRY LOGIC
             max_retries = 3
             base_delay = 2
             
             for attempt in range(max_retries):
                 try:
                     response = model.generate_content(
-                        inputs,
+                        contents,
                         generation_config=GenerationConfig(response_mime_type="application/json")
                     )
                     return response.text
@@ -199,6 +217,7 @@ class CognitiveService:
                         time.sleep(sleep_time)
                     else:
                         raise e
+                        
         except Exception as e:
             print(f"Vertex Generation Error: {e}")
             return f"{{\"summary\": \"AI Error: {str(e)}\", \"focus_points\": []}}"

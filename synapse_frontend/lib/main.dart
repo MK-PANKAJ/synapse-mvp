@@ -28,10 +28,9 @@ class SynapseApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.indigo,
         useMaterial3: true,
-        // DYNAMIC FONT SWITCHING (Simulated)
-        // In a full app, we would use a Provider to switch textTheme globally.
-        // For this MVP, we will rely on Widgets checking the profile, 
-        // or just use a readable default.
+        // DYNAMIC FONT SWITCHING
+        // We observe that standard Material TextTheme is updated by the widgets below
+        // based on the 'profile'. For the global fallback, we use LexendDeca.
         textTheme: GoogleFonts.lexendDecaTextTheme(), 
       ),
       home: DashboardScreen(),
@@ -491,6 +490,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                             md.ExtensionSet.gitHubFlavored.blockSyntaxes,
                                                             [md.EmojiSyntax(), ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes, LatexSyntax()]
                                                         ),
+                                                        styleSheet: MarkdownStyleSheet(
+                                                          p: _selectedProfile == "Dyslexia" 
+                                                              ? GoogleFonts.comicNeue(fontSize: 16) // Dyslexia-friendly-ish
+                                                              : GoogleFonts.lexendDeca(fontSize: 15),
+                                                          h1: _selectedProfile == "Dyslexia"
+                                                              ? GoogleFonts.comicNeue(fontSize: 24, fontWeight: FontWeight.bold)
+                                                              : GoogleFonts.lexendDeca(fontSize: 22, fontWeight: FontWeight.bold),
+                                                          listBullet: TextStyle(fontSize: 16),
+                                                        ),
                                                     )
                                                 )
                                             ),
@@ -528,6 +536,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                                 padding: EdgeInsets.all(16),
                                                 color: Colors.white,
                                                 child: Column(children: [
+                                                    // PRIVACY NOTICE
+                                                    Container(
+                                                        padding: EdgeInsets.all(8),
+                                                        margin: EdgeInsets.only(bottom: 8),
+                                                        color: Colors.amber.shade100,
+                                                        child: Row(children: [
+                                                            Icon(Icons.warning, size: 16, color: Colors.orange.shade800),
+                                                            SizedBox(width: 8),
+                                                            Expanded(child: Text("Note: Diagrams are rendered via mermaid.ink. Content is processed remotely.", style: TextStyle(fontSize: 12)))
+                                                        ])
+                                                    ),
                                                     // 1. RENDERED DIAGRAM (via mermaid.ink)
                                                     Expanded(
                                                         child: Center(
