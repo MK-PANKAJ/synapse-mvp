@@ -25,7 +25,8 @@ echo "---------------------------------------------"
 gcloud run deploy synapse-backend \
     --source synapse_backend \
     --region us-central1 \
-    --allow-unauthenticated
+    --allow-unauthenticated \
+    --set-env-vars GCP_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=us-central1,GEMINI_API_KEY=""
 
 if [ $? -eq 0 ]; then
     echo "============================================="

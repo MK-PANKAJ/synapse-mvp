@@ -3,7 +3,17 @@ import mimetypes
 import time
 import random
 import vertexai
-from vertexai.generative_models import GenerativeModel, Part, GenerationConfig, Content
+try:
+    from vertexai.generative_models import GenerativeModel, Part, GenerationConfig, Content
+except ImportError:
+    try:
+        from vertexai.preview.generative_models import GenerativeModel, Part, GenerationConfig, Content
+    except ImportError:
+        print("WARNING: Could not import Vertex AI GenerativeModel. AI features will be disabled.")
+        GenerativeModel = None
+        Part = None
+        GenerationConfig = None
+        Content = None
 from google.cloud import firestore, storage
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
@@ -130,7 +140,6 @@ class VideoIngest(BaseModel):
 
 class DoubtQuery(BaseModel):
     lecture_id: str
-    user_id: str
     user_id: str
     question: str
     user_profile: str = "General" # Default for backward compatibility
