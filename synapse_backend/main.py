@@ -17,34 +17,57 @@ load_dotenv()
 
 # --- CLOUD CONFIGURATION ---
 # Default to current environment if variables not set
-PROJECT_ID = os.getenv("GCP_PROJECT", "synapse-483211") 
+PROJECT_ID = os.getenv("GCP_PROJECT")
 LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-BUCKET_NAME = f"{PROJECT_ID}-uploads" # Storage Bucket Name
+BUCKET_NAME = f"{PROJECT_ID}-uploads" if PROJECT_ID else "local-uploads" # Storage Bucket Name
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-print(f"Starting Synapse Backend in CLOUD MODE.")
+if not PROJECT_ID:
+    print("WARNING: GCP_PROJECT not set. Ensure it is set in .env or Cloud Run environment.")
+
+print(f"Starting Synapse Backend.")
 print(f"Project: {PROJECT_ID}, Location: {LOCATION}")
 
-# --- INITIALIZE GOOGLE CLOUD SERVICES ---
+# --- INITIALIZE AI SERVICES ---
 try:
-    # 1. Vertex AI
-    vertexai.init(project=PROJECT_ID, location=LOCATION)
-    # Gemini 2.0 retires Mar 2026. Using Gemini 2.5 Flash (Supported until June 2026).
-    # Retry logic (implemented below) handles 429 Quota errors.
-    model = GenerativeModel("gemini-2.5-flash")
-    print("SUCCESS: Vertex AI Initialized.")
+    # 1. Vertex AI (Cloud Mode)
+    if PROJECT_ID:
+        vertexai.init(project=PROJECT_ID, location=LOCATION)
+        model = GenerativeModel("gemini-1.5-flash")
+        print("SUCCESS: Vertex AI Initialized (Cloud Mode).")
+    
+    # 2. Google AI Studio (Local Mode Fallback)
+    elif GEMINI_API_KEY:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        print("SUCCESS: Google AI Studio Initialized (Local Mode).")
+    
+    else:
+        print("CRITICAL WARNING: No GCP Project AND No Gemini API Key found. AI features will fail.")
+        model = None
 
-    # 2. Firestore
-    db = firestore.Client(project=PROJECT_ID)
-    print("SUCCESS: Firestore Initialized.")
+    # 3. Firestore
+    if PROJECT_ID:
+        db = firestore.Client(project=PROJECT_ID)
+        print("SUCCESS: Firestore Initialized.")
+    else:
+        print("WARNING: Firestore not available (No Project ID). Persistence disabled.")
+        db = None
 
-    # 3. Cloud Storage
-    storage_client = storage.Client(project=PROJECT_ID)
-    print("SUCCESS: Storage Initialized.")
+    # 4. Cloud Storage
+    if PROJECT_ID:
+        storage_client = storage.Client(project=PROJECT_ID)
+        print("SUCCESS: Storage Initialized.")
+    else:
+        print("WARNING: Cloud Storage not available (No Project ID). Uploads disabled.")
+        storage_client = None
+
 except Exception as e:
-    print(f"CRITICAL ERROR - CLOUD INIT FAILED: {e}")
-    # We do NOT crash here so logs can be read, but app will be broken.
+    print(f"CRITICAL ERROR - INIT FAILED: {e}")
     model = None
     db = None
+    storage_client = None
 
 app = FastAPI(title="Synapse API (Cloud Only)", version="2.0")
 
@@ -239,7 +262,7 @@ class CognitiveService:
 
 class DatabaseService:
     @staticmethod
-    def save_lecture(user_id, video_id, summary_data, transcript_snippet):
+    def save_lecture(user_id, video_id, summary_data, transcript_snippet, podcast_status="pending", podcast_script=None):
         if not db:
              print("Firestore not connected. Skipping save.")
              return "error-no-db"
@@ -250,11 +273,14 @@ class DatabaseService:
             "summary_data": summary_data,
             "context_snippet": transcript_snippet, 
             "timestamp": firestore.SERVER_TIMESTAMP,
-            "podcast_status": "pending"  # Initialize podcast as pending
+            "podcast_status": podcast_status
         }
+        if podcast_script:
+            data["podcast_script"] = podcast_script
+            data["podcast_generated_at"] = firestore.SERVER_TIMESTAMP
         
         doc_ref = db.collection("users").document(user_id).collection("lectures").document(video_id)
-        doc_ref.set(data)
+        doc_ref.set(data, merge=True)
         return doc_ref.id
 
     @staticmethod
@@ -331,11 +357,16 @@ async def ingest_lecture(payload: VideoIngest):
                     ydl.download([payload.video_url])
                 
                 # Upload to GCS
-                bucket = storage_client.bucket(BUCKET_NAME)
-                blob = bucket.blob(f"audio_cache/{video_id}.mp3")
-                blob.upload_from_filename(f"/tmp/{video_id}.mp3")
-                
-                audio_uri = f"gs://{BUCKET_NAME}/audio_cache/{video_id}.mp3"
+                if storage_client:
+                    bucket = storage_client.bucket(BUCKET_NAME)
+                    blob = bucket.blob(f"audio_cache/{video_id}.mp3")
+                    blob.upload_from_filename(f"/tmp/{video_id}.mp3")
+                    
+                    audio_uri = f"gs://{BUCKET_NAME}/audio_cache/{video_id}.mp3"
+                else: 
+                     audio_uri = None
+                     raise Exception("Storage not available for audio fallback")
+
                 full_text = "Audio Content (Processed via Multimodal AI)"
                 ai_response = CognitiveService.generate_content("", payload.user_profile, video_uri=audio_uri)
                 
@@ -346,66 +377,51 @@ async def ingest_lecture(payload: VideoIngest):
                     status_code=400, 
                     detail="Synapse could not access this video (YouTube might be blocking Cloud Servers). SOLUTION: Please download this video manually and use the 'Upload Video' button!"
                 )
+            finally:
+                # 4. CLEANUP EPHEMERAL FILES
+                local_audio_path = f"/tmp/{video_id}.mp3"
+                if os.path.exists(local_audio_path):
+                    try:
+                        os.remove(local_audio_path)
+                        print(f"Cleanup: Removed {local_audio_path}")
+                    except Exception as cleanup_err:
+                        print(f"Cleanup Error: {cleanup_err}")
 
 
-    DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000])
-    
-    # TRIGGER ASYNC PODCAST GENERATION IN BACKGROUND
-    import threading
-    
-    def generate_podcast_async():
-        """Background task to generate podcast script"""
-        try:
-            # Update status to "generating"
-            doc_ref = db.collection('users').document(payload.user_id).collection('lectures').document(video_id)
-            doc_ref.update({
-                'podcast_status': 'generating'
-            })
-            
-            # Determine source for podcast
-            podcast_source = full_text if full_text and not full_text.startswith("Video Content") and not full_text.startswith("Audio Content") else ""
-            if not podcast_source:
-                # Fallback: use summary
-                import json
-                try:
-                    summary_data = json.loads(ai_response)
-                    podcast_source = summary_data.get('summary', '')
-                except:
-                    pass
-            
-            if podcast_source:
-                # Generate podcast
-                script = CognitiveService.generate_podcast_script(podcast_source[:15000], payload.user_profile)
-                
-                # Save to Firestore
-                doc_ref = db.collection('users').document(payload.user_id).collection('lectures').document(video_id)
-                doc_ref.update({
-                    'podcast_script': script,
-                    'podcast_status': 'ready',
-                    'podcast_generated_at': firestore.SERVER_TIMESTAMP
-                })
-            else:
-                raise Exception("No valid source content for podcast generation")
-                
-        except Exception as e:
-            print(f"Async podcast generation failed: {e}")
-            doc_ref = db.collection('users').document(payload.user_id).collection('lectures').document(video_id)
-            doc_ref.update({
-                'podcast_status': 'failed',
-                'podcast_error': str(e)
-            })
-    
-    # Start background thread
-    thread = threading.Thread(target=generate_podcast_async)
-    thread.daemon = True  # Thread dies when main process ends
-    thread.start()
+    # GENERATE PODCAST SYNCHRONOUSLY (BLOCKING) for MVP Reliability
+    podcast_script = ""
+    podcast_status = "failed"
+    try:
+        # Determine source for podcast
+        podcast_source = full_text if full_text and not full_text.startswith("Video Content") and not full_text.startswith("Audio Content") else ""
+        if not podcast_source:
+             # Fallback: use summary
+             import json
+             try:
+                 summary_data = json.loads(ai_response)
+                 podcast_source = summary_data.get('summary', '')
+             except:
+                 pass
+        
+        if podcast_source:
+             podcast_script = CognitiveService.generate_podcast_script(podcast_source[:15000], payload.user_profile)
+             podcast_status = "ready"
+        else:
+             print("Warning: No text source available for podcast generation.")
+             
+    except Exception as e:
+        print(f"Podcast Generation Failed: {e}")
+        podcast_status = "failed"
+
+    DatabaseService.save_lecture(payload.user_id, video_id, ai_response, full_text[:10000], podcast_status=podcast_status, podcast_script=podcast_script)
     
     return {
         "status": "success", 
         "lecture_id": video_id, 
         "content": ai_response,
         "transcript_context": full_text[:5000],
-        "podcast_status": "pending"  # Indicate podcast is being generated in background
+        "podcast_status": podcast_status,
+        "podcast_script": podcast_script
     }
 
 @app.post("/api/v1/generate-podcast")
@@ -465,8 +481,12 @@ async def solve_doubt(payload: DoubtQuery):
     ANSWER:
     """
     
+    # SANITIZATION WARNING: In a real prod env, we should use the `Part` object or ChatSession
+    # to strictly separate User input from System instructions.
+    
     if model:
         try:
+             # Basic injection safety: Wrap user input in explicit delimiters in future iterations
             response = model.generate_content(chat_prompt)
             return {"answer": response.text}
         except Exception as e:

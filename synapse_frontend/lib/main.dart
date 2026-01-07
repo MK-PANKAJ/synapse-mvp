@@ -7,8 +7,12 @@ import 'dart:html' as html;
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:uuid/uuid.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart'; // ADDED
 import 'podcast_tab.dart';
 
 void main() {
@@ -24,7 +28,11 @@ class SynapseApp extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.indigo,
         useMaterial3: true,
-        textTheme: GoogleFonts.lexendDecaTextTheme(), // Accessible Font
+        // DYNAMIC FONT SWITCHING (Simulated)
+        // In a full app, we would use a Provider to switch textTheme globally.
+        // For this MVP, we will rely on Widgets checking the profile, 
+        // or just use a readable default.
+        textTheme: GoogleFonts.lexendDecaTextTheme(), 
       ),
       home: DashboardScreen(),
     );
@@ -48,6 +56,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _mermaidCode = "";
   String _currentMermaidCode = "";
   TabController? _tabController;
+  
+  // Video Player
+  YoutubePlayerController? _ytController;
+
   String _selectedProfile = "ADHD"; // Default
   final List<String> _profiles = ["ADHD", "Dyslexia", "Visual", "Hinglish"];
   
@@ -56,10 +68,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isPodcastGenerating = false;
   Timer? _podcastPollTimer;
   
-  final String userID = "student_01"; 
-  // NOTE: Replace with 10.0.2.2 for Emulator or Cloud Run URL for Production
-  final String backendUrl = "https://synapse-backend-232524391998.us-central1.run.app"; 
+  
+  String userID = "guest_user"; 
+  // Use --dart-define=BACKEND_URL=... at build time, or fallback to localhost/hardcoded
+  static const String _envBackendUrl = String.fromEnvironment('BACKEND_URL', defaultValue: "https://synapse-backend-232524391998.us-central1.run.app");
+  final String backendUrl = _envBackendUrl;
 
+  @override
+  void initState() {
+    super.initState();
+    _initUser();
+  }
+
+  Future<void> _initUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? storedID = prefs.getString('synapse_user_id');
+    if (storedID == null) {
+      storedID = Uuid().v4();
+      await prefs.setString('synapse_user_id', storedID);
+    }
+    setState(() {
+      userID = storedID!;
+    });
+    print("Synapse User ID: $userID");
+  }
   Future<void> _processVideo() async {
     if (_urlController.text.isEmpty) return;
     
@@ -80,7 +112,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         
         // Defensive: safely get summary_data OR content
         String rawSummaryJson = (data['summary_data'] ?? data['content'] ?? "").toString();
-        rawSummaryJson = rawSummaryJson.replaceAll("```json", "").replaceAll("```", "").trim();
+        
+        // ROBUST JSON CLEANING
+        // 1. Remove Markdown Code Blocks
+        rawSummaryJson = rawSummaryJson.replaceAll(RegExp(r'```json\s*', caseSensitive: false), "")
+                                       .replaceAll(RegExp(r'```', caseSensitive: false), "")
+                                       .trim();
+        // 2. Sometimes AI adds text before the JSON. Find the first '{' and last '}'
+        int firstBrace = rawSummaryJson.indexOf('{');
+        int lastBrace = rawSummaryJson.lastIndexOf('}');
+        if (firstBrace != -1 && lastBrace != -1 && lastBrace > firstBrace) {
+            rawSummaryJson = rawSummaryJson.substring(firstBrace, lastBrace + 1);
+        }
         
         Map<String, dynamic> aiContent = {};
         try {
@@ -150,8 +193,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                  _isPodcastGenerating = false;
              }
              
+             
              _isLoading = false;
              _tabController?.animateTo(0);
+             
+             // Init Player
+             if (_currentVideoId.isNotEmpty && _currentVideoId != "mock_vid") {
+                 _ytController = YoutubePlayerController(
+                    initialVideoId: _currentVideoId,
+                    flags: YoutubePlayerFlags(autoPlay: false, mute: false),
+                 );
+             }
          });
       } else {
         setState(() => _currentSummary = "Server Error (${response.statusCode}): ${response.body}");
@@ -173,17 +225,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           setState(() => _isLoading = true);
           PlatformFile file = result.files.first;
           
-          // WEB vs MOBILE: usage differs, but for MVP web we use bytes
-          // Note: For large files in prod, we'd use signed URLs. usage here is simple multipart.
+          // WEB vs MOBILE/DESKTOP
           var request = http.MultipartRequest("POST", Uri.parse('$backendUrl/api/v1/upload'));
           
           if (file.bytes != null) {
-              // WEB
+              // WEB or Small File in RAM
               request.files.add(http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name));
+          } else if (file.path != null) {
+             // MOBILE / DESKTOP (Stream from disk to save RAM)
+             request.files.add(await http.MultipartFile.fromPath('file', file.path!));
           } else {
-             // MOBILE (not active, but safe fallback)
-             print("File path missing (common on web without bytes)");
-             setState(() { _isLoading = false; _currentSummary = "Error: File selection failed."; });
+             print("File path missing and bytes missing. Cannot upload.");
+             setState(() { _isLoading = false; _currentSummary = "Error: File selection failed (No data)."; });
              return;
           }
 
@@ -389,6 +442,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             SizedBox(height: 20),
             
+            // VIDEO PLAYER
+            if (_ytController != null)
+                Container(
+                    margin: EdgeInsets.only(bottom: 20),
+                    child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: YoutubePlayer(
+                            controller: _ytController!,
+                            showVideoProgressIndicator: true,
+                        ),
+                    )
+                ),
+
             // 2. TABS (Summary vs Bingo vs Podcast)
             if (_isLoading) Expanded(child: Center(child: CircularProgressIndicator())),
             

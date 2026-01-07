@@ -1,5 +1,5 @@
 name: synapse_frontend
-description: "A new Flutter project."
+description: "Synapse: AI-Powered Neuro-adaptive Learning Platform."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -19,6 +19,8 @@ dependencies:
   file_picker: ^6.1.1
   url_launcher: ^6.2.0
   flutter_math_fork: ^0.7.2
+  uuid: ^4.3.3
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
@@ -27,3 +29,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/
+

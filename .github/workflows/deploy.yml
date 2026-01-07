@@ -32,7 +32,7 @@ jobs:
       - name: Build Web
         working-directory: ./synapse_frontend
         # IMPORTANT: Assuming repo name is 'synapse-mvp'. If different, change base-href.
-        run: flutter build web --release --base-href "/synapse-mvp/"
+        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
